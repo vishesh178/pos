@@ -1,0 +1,63 @@
+{
+  "name": "curated-art-erp",
+  "version": "1.0.0",
+  "description": "Curated Art - Premium ERP & Billing Management System with Zoho API Integration",
+  "main": "electron/main.js",
+  "scripts": {
+    "server": "node server/index.js",
+    "dev:server": "nodemon server/index.js",
+    "dev:client": "vite",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "build:client": "vite build",
+    "build": "npm run build:client",
+    "electron": "cross-env NODE_ENV=development electron .",
+    "seed": "node server/prisma/seed.js",
+    "test": "cross-env NODE_ENV=test node --test server/tests/*.test.js",
+    "prisma:generate": "prisma generate --schema=server/prisma/schema.prisma",
+    "prisma:push": "prisma db push --schema=server/prisma/schema.prisma",
+    "setup": "npm install && npm run prisma:generate && npm run prisma:push && npm run seed"
+  },
+  "keywords": [
+    "erp",
+    "pos",
+    "billing",
+    "zoho",
+    "inventory",
+    "books",
+    "electron",
+    "react"
+  ],
+  "author": "Curated Art Development Team",
+  "license": "ISC",
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "axios": "^1.21.0",
+    "bcryptjs": "^3.0.3",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "lucide-react": "^1.66.0",
+    "multer": "^2.5.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.7.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "autoprefixer": "^10.6.2",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "electron": "^45.2.1",
+    "nodemon": "^3.1.14",
+    "postcss": "^8.5.32",
+    "prisma": "5.22.0",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.5"
+  }
+}

@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-primary: #090a0f;
+    --bg-secondary: #12141a;
+    --bg-card: #161820;
+    --border-color: #272a38;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --accent-gold: #d97706;
+    --accent-gold-hover: #b45309;
+  }
+}
+

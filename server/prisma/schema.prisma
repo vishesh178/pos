@@ -1,0 +1,452 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model BusinessProfile {
+  id                 String   @id @default(cuid())
+  businessName       String   @default("Curated Art")
+  legalName          String   @default("Curated Art Luxury Decor Pvt Ltd")
+  gstin              String   @default("24AAAAA0000A1Z5")
+  state              String   @default("Gujarat")
+  stateCode          String   @default("24")
+  address            String   @default("Showroom #104, Design District, SG Highway, Ahmedabad, Gujarat - 380054")
+  phone              String   @default("+91 98765 43210")
+  email              String   @default("contact@curatedart.in")
+  currency           String   @default("INR")
+  currencySymbol     String   @default("₹")
+  invoicePrefix      String   @default("CA-")
+  invoiceNextNumber  Int      @default(1001)
+  estimatePrefix     String   @default("EST-")
+  estimateNextNumber Int      @default(1001)
+  thermalWidth       String   @default("80mm")
+  termsAndConditions String   @default("1. Goods once sold can only be exchanged within 7 days in original packing.\n2. Fragile items (glass, mirrors) must be inspected at the time of delivery.\n3. All disputes subject to Ahmedabad jurisdiction.")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         String     @default("BILLING") // ADMIN, MANAGER, BILLING, INVENTORY
+  isActive     Boolean    @default(true)
+  auditLogs    AuditLog[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model ZohoConfig {
+  id                    String    @id @default("default")
+  clientId              String?
+  clientSecretEncrypted String?
+  refreshTokenEncrypted String?
+  accessToken           String?
+  tokenExpiresAt        DateTime?
+  organizationId        String?
+  dcDomain              String    @default("in") // in = accounts.zoho.in, api.zoho.in
+  isConnected           Boolean   @default(false)
+  autoSyncEnabled       Boolean   @default(true)
+  lastSyncAt            DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
+
+model Category {
+  id             String    @id @default(cuid())
+  name           String    @unique
+  description    String?
+  zohoCategoryId String?
+  products       Product[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Product {
+  id                 String              @id @default(cuid())
+  name               String
+  sku                String              @unique
+  barcode            String              @unique
+  categoryId         String?
+  category           Category?           @relation(fields: [categoryId], references: [id])
+  subcategory        String?
+  brand              String?             @default("Curated Art")
+  description        String?
+  imageUrl           String?
+  purchasePrice      Float               @default(0.0)
+  sellingPrice       Float               @default(0.0)
+  mrp                Float               @default(0.0)
+  gstRate            Float               @default(18.0)
+  hsnCode            String              @default("9701")
+  currentStock       Int                 @default(0)
+  minStock           Int                 @default(5)
+  unit               String              @default("PCS")
+  supplierId         String?
+  supplier           Supplier?           @relation(fields: [supplierId], references: [id])
+  status             String              @default("ACTIVE") // ACTIVE, INACTIVE, DISCONTINUED
+  zohoItemId         String?
+  zohoSyncStatus     String              @default("PENDING")
+  zohoLastSyncedAt   DateTime?
+  invoiceItems       InvoiceItem[]
+  estimateItems      EstimateItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  purchaseBillItems  PurchaseBillItem[]
+  stockMovements     StockMovement[]
+  salesReturnItems   SalesReturnItem[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model Customer {
+  id              String     @id @default(cuid())
+  name            String
+  mobile          String
+  email           String?
+  billingAddress  String?
+  shippingAddress String?
+  pincode         String?
+  gstin           String?
+  gstDate         String?
+  panNo           String?
+  msmeNo          String?
+  state           String?    @default("Gujarat")
+  stateCode       String?    @default("24")
+  customerType    String     @default("RETAIL") // RETAIL, INTERIOR_DESIGNER, CORPORATE
+  pricebookId     String?
+  pricebook       Pricebook? @relation(fields: [pricebookId], references: [id])
+  openingBalance  Float      @default(0.0)
+  currentBalance  Float      @default(0.0)
+  zohoContactId   String?
+  zohoSyncStatus  String     @default("PENDING")
+  invoices        Invoice[]
+  estimates       Estimate[]
+  payments        Payment[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Supplier {
+  id             String          @id @default(cuid())
+  name           String
+  contactPerson  String?
+  mobile         String
+  email          String?
+  gstin          String?
+  address        String?
+  state          String?         @default("Gujarat")
+  stateCode      String?         @default("24")
+  openingBalance Float           @default(0.0)
+  currentBalance Float           @default(0.0)
+  zohoContactId  String?
+  zohoSyncStatus String          @default("PENDING")
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
+  purchaseBills  PurchaseBill[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model Invoice {
+  id             String        @id @default(cuid())
+  invoiceNumber  String        @unique
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  customerName   String
+  customerMobile String?
+  customerGstin  String?
+  placeOfSupply  String        @default("24-Gujarat")
+  isInterState   Boolean       @default(false)
+  pricebookId    String?
+  pricebook      Pricebook?    @relation(fields: [pricebookId], references: [id])
+  pricebookName  String?
+  subtotal       Float
+  discountTotal  Float         @default(0.0)
+  taxTotal       Float         @default(0.0)
+  cgstTotal      Float         @default(0.0)
+  sgstTotal      Float         @default(0.0)
+  igstTotal      Float         @default(0.0)
+  roundOff       Float         @default(0.0)
+  grandTotal     Float
+  paidAmount     Float         @default(0.0)
+  balanceAmount  Float         @default(0.0)
+  paymentStatus  String        @default("PAID") // PAID, PARTIAL, UNPAID
+  paymentMethod  String        @default("CASH") // CASH, UPI, CARD, BANK_TRANSFER, SPLIT
+  notes          String?
+  status         String        @default("COMPLETED") // COMPLETED, CANCELLED, RETURNED
+  zohoInvoiceId  String?
+  zohoSyncStatus String        @default("PENDING")
+  items          InvoiceItem[]
+  payments       Payment[]
+  salesReturns   SalesReturn[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model InvoiceItem {
+  id             String   @id @default(cuid())
+  invoiceId      String
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product? @relation(fields: [productId], references: [id])
+  productName    String
+  sku            String
+  hsnCode        String
+  quantity       Int
+  unitPrice      Float
+  mrp            Float
+  discountAmount Float    @default(0.0)
+  taxRate        Float
+  taxableAmount  Float
+  cgstAmount     Float    @default(0.0)
+  sgstAmount     Float    @default(0.0)
+  igstAmount     Float    @default(0.0)
+  totalAmount    Float
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  customerId      String?
+  customer        Customer?     @relation(fields: [customerId], references: [id])
+  invoiceId       String?
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id])
+  purchaseBillId  String?
+  purchaseBill    PurchaseBill? @relation(fields: [purchaseBillId], references: [id])
+  type            String        @default("RECEIPT") // RECEIPT, PAYMENT, REFUND
+  paymentMethod   String // CASH, UPI, CARD, BANK_TRANSFER
+  amount          Float
+  referenceNumber String?
+  notes           String?
+  zohoPaymentId   String?
+  zohoSyncStatus  String        @default("PENDING")
+  createdAt       DateTime      @default(now())
+}
+
+model SalesReturn {
+  id                String            @id @default(cuid())
+  returnNumber      String            @unique
+  invoiceId         String
+  invoice           Invoice           @relation(fields: [invoiceId], references: [id])
+  reason            String?
+  totalRefundAmount Float
+  refundMethod      String            @default("CASH")
+  status            String            @default("COMPLETED")
+  items             SalesReturnItem[]
+  createdAt         DateTime          @default(now())
+}
+
+model SalesReturnItem {
+  id            String      @id @default(cuid())
+  salesReturnId String
+  salesReturn   SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product     @relation(fields: [productId], references: [id])
+  quantity      Int
+  refundAmount  Float
+  condition     String      @default("RESTOCKABLE") // RESTOCKABLE, DAMAGED
+}
+
+model PurchaseOrder {
+  id           String              @id @default(cuid())
+  poNumber     String              @unique
+  supplierId   String
+  supplier     Supplier            @relation(fields: [supplierId], references: [id])
+  status       String              @default("DRAFT") // DRAFT, ISSUED, RECEIVED, CANCELLED
+  orderDate    DateTime            @default(now())
+  expectedDate DateTime?
+  subtotal     Float               @default(0.0)
+  taxTotal     Float               @default(0.0)
+  grandTotal   Float               @default(0.0)
+  notes        String?
+  zohoPoId     String?
+  items        PurchaseOrderItem[]
+  bills        PurchaseBill[]
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  quantity        Int
+  unitCost        Float
+  taxRate         Float         @default(18.0)
+  totalAmount     Float
+}
+
+model PurchaseBill {
+  id                 String             @id @default(cuid())
+  billNumber         String             @unique
+  supplierBillNumber String?
+  supplierId         String
+  supplier           Supplier           @relation(fields: [supplierId], references: [id])
+  purchaseOrderId    String?
+  purchaseOrder      PurchaseOrder?     @relation(fields: [purchaseOrderId], references: [id])
+  billDate           DateTime           @default(now())
+  dueDate            DateTime?
+  subtotal           Float
+  taxTotal           Float
+  grandTotal         Float
+  paidAmount         Float              @default(0.0)
+  paymentStatus      String             @default("UNPAID") // PAID, PARTIAL, UNPAID
+  notes              String?
+  zohoBillId         String?
+  zohoSyncStatus     String             @default("PENDING")
+  items              PurchaseBillItem[]
+  payments           Payment[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model PurchaseBillItem {
+  id             String       @id @default(cuid())
+  purchaseBillId String
+  purchaseBill   PurchaseBill @relation(fields: [purchaseBillId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product      @relation(fields: [productId], references: [id])
+  quantity       Int
+  unitCost       Float
+  taxRate        Float
+  totalAmount    Float
+}
+
+model StockMovement {
+  id            String   @id @default(cuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  type          String // SALE, PURCHASE, RETURN_INWARD, DAMAGE_OUTWARD, ADJUSTMENT_ADD, ADJUSTMENT_SUBTRACT, OPENING
+  quantity      Int
+  unitCost      Float?
+  balanceAfter  Int
+  referenceType String? // INVOICE, PURCHASE_BILL, RETURN, MANUAL
+  referenceId   String?
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime @default(now())
+}
+
+model Expense {
+  id             String   @id @default(cuid())
+  category       String // Rent, Electricity, Salaries, Transportation, Packaging, Marketing, Maintenance, Misc
+  title          String
+  description    String?
+  amount         Float
+  taxRate        Float    @default(0.0)
+  taxAmount      Float    @default(0.0)
+  paymentMethod  String   @default("BANK_TRANSFER")
+  receiptUrl     String?
+  expenseDate    DateTime @default(now())
+  zohoExpenseId  String?
+  zohoSyncStatus String   @default("PENDING")
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SyncJob {
+  id              String    @id @default(cuid())
+  entityType      String // PRODUCT, CUSTOMER, SUPPLIER, INVOICE, BILL, EXPENSE, ADJUSTMENT
+  localRecordId   String
+  zohoRecordId    String?
+  operation       String // CREATE, UPDATE, DELETE
+  payload         String // JSON string
+  status          String    @default("PENDING") // PENDING, PROCESSING, SYNCED, FAILED, RETRY_SCHEDULED
+  retryCount      Int       @default(0)
+  maxRetries      Int       @default(5)
+  errorMessage    String?
+  lastAttemptedAt DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  userName   String?
+  action     String
+  entityType String
+  entityId   String?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
+
+model Estimate {
+  id                 String         @id @default(cuid())
+  estimateNumber     String         @unique
+  customerId         String?
+  customer           Customer?      @relation(fields: [customerId], references: [id])
+  customerName       String
+  customerMobile     String?
+  customerGstin      String?
+  placeOfSupply      String         @default("24-Gujarat")
+  isInterState       Boolean        @default(false)
+  pricebookId        String?
+  pricebook          Pricebook?     @relation(fields: [pricebookId], references: [id])
+  pricebookName      String?
+  subtotal           Float
+  discountTotal      Float          @default(0.0)
+  taxTotal           Float          @default(0.0)
+  cgstTotal          Float          @default(0.0)
+  sgstTotal          Float          @default(0.0)
+  igstTotal          Float          @default(0.0)
+  roundOff           Float          @default(0.0)
+  grandTotal         Float
+  validityDays       Int            @default(15)
+  notes              String?
+  status             String         @default("PENDING") // PENDING, CONVERTED, CANCELLED
+  convertedInvoiceId String?
+  zohoEstimateId     String?
+  zohoSyncStatus     String         @default("PENDING")
+  items              EstimateItem[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+}
+
+model EstimateItem {
+  id             String   @id @default(cuid())
+  estimateId     String
+  estimate       Estimate @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product? @relation(fields: [productId], references: [id])
+  productName    String
+  sku            String
+  hsnCode        String
+  quantity       Int
+  unitPrice      Float
+  mrp            Float
+  discountAmount Float    @default(0.0)
+  taxRate        Float
+  taxableAmount  Float
+  cgstAmount     Float    @default(0.0)
+  sgstAmount     Float    @default(0.0)
+  igstAmount     Float    @default(0.0)
+  totalAmount    Float
+}
+
+model Pricebook {
+  id                 String     @id @default(cuid())
+  name               String     @unique // "Standard Retail (MRP)", "Interior Designer (20% Off)", "Wholesale Bulk (35% Off)"
+  code               String     @unique // "RETAIL", "DESIGNER", "WHOLESALE", "VIP"
+  description        String?
+  discountPercentage Float      @default(0.0)
+  pricingType        String     @default("DISCOUNT") // DISCOUNT, MARKUP
+  isDefault          Boolean    @default(false)
+  isActive           Boolean    @default(true)
+  zohoPricebookId    String?
+  zohoSyncStatus     String     @default("PENDING")
+  customers          Customer[]
+  invoices           Invoice[]
+  estimates          Estimate[]
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}

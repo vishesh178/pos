@@ -1,0 +1,19 @@
+{
+  "short_name": "Curated Art",
+  "name": "Curated Art — Luxury ERP & POS",
+  "description": "Offline-First Luxury Home Décor ERP, Wholesale Catalog & Point of Sale",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#090a0f",
+  "theme_color": "#090a0f",
+  "display": "standalone",
+  "orientation": "portrait-primary"
+}
+
