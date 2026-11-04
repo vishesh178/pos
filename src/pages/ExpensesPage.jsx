@@ -175,20 +175,19 @@ export default function ExpensesPage() {
                 <th className="px-4 py-3">Expense Title & Description</th>
                 <th className="px-4 py-3">Payment Mode</th>
                 <th className="px-4 py-3 text-right">Amount</th>
-                <th className="px-4 py-3 text-center">Zoho Sync</th>
                 <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-800 text-stone-300">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-10 text-stone-400">
+                  <td colSpan="6" className="text-center py-10 text-stone-400">
                     Loading expenses...
                   </td>
                 </tr>
               ) : expenses.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="text-center py-10 text-stone-400">
+                  <td colSpan="6" className="text-center py-10 text-stone-400">
                     No expense records found.
                   </td>
                 </tr>
@@ -212,9 +211,6 @@ export default function ExpensesPage() {
                     <td className="px-4 py-3 text-stone-300">{e.paymentMethod}</td>
                     <td className="px-4 py-3 text-right font-mono font-bold text-rose-400 text-sm">
                       ₹{e.amount.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-center font-mono text-[10px] text-stone-400">
-                      {e.zohoSyncStatus}
                     </td>
                     <td className="px-5 py-3 text-right">
                       {hasPermission('ADMIN') && (

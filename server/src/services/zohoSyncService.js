@@ -174,6 +174,10 @@ async function processJob(job) {
  * Execute a pass over the SyncJob queue
  */
 async function runSyncPass() {
+  return { skipped: true, reason: 'Zoho API synchronization is disabled.' };
+}
+
+async function _disabled_runSyncPass() {
   if (isWorkerRunning) return { skipped: true, reason: 'Worker is already processing.' };
   isWorkerRunning = true;
 
@@ -279,18 +283,7 @@ async function runSyncPass() {
  * Start the background polling interval (e.g. every 30 seconds)
  */
 function startSyncScheduler(intervalMs = 30000) {
-  if (syncIntervalId) clearInterval(syncIntervalId);
-  syncIntervalId = setInterval(async () => {
-    try {
-      await runSyncPass();
-    } catch (e) {
-      // Background runner error suppressed
-    }
-  }, intervalMs);
-  if (syncIntervalId.unref) {
-    syncIntervalId.unref();
-  }
-  console.log(`Zoho Background Outbox Sync Worker started (interval: ${intervalMs / 1000}s)`);
+  // Disabled - Standalone Mode
 }
 
 function stopSyncScheduler() {

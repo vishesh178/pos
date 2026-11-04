@@ -568,7 +568,7 @@ export default function SettingsPage() {
                   <option value="BILLING">Billing Staff / Cashier (POS & Sales)</option>
                   <option value="INVENTORY">Inventory Staff (Catalog & Stock)</option>
                   <option value="MANAGER">Store Manager (Operational Reports & POs)</option>
-                  <option value="ADMIN">Owner / Admin (Full Access & Zoho Settings)</option>
+                  <option value="ADMIN">Owner / Admin (Full System Access)</option>
                 </select>
               </div>
 

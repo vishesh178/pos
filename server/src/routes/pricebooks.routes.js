@@ -1,8 +1,6 @@
 const express = require('express');
 const prisma = require('../prisma');
 const { authenticateToken, requireRole } = require('../middleware/auth');
-const zohoApi = require('../services/zohoApiService');
-const zohoSync = require('../services/zohoSyncService');
 
 const router = express.Router();
 
@@ -102,28 +100,10 @@ router.post('/', authenticateToken, requireRole('ADMIN'), async (req, res) => {
       },
     });
 
-    // Enqueue transactional outbox job for Zoho Books sync
-    await prisma.syncJob.create({
-      data: {
-        entityType: 'PRICEBOOK',
-        localRecordId: pricebook.id,
-        operation: 'CREATE',
-        payload: JSON.stringify({
-          name: pricebook.name,
-          description: pricebook.description,
-          discountPercentage: pricebook.discountPercentage,
-          isActive: pricebook.isActive,
-        }),
-      },
-    });
-
     req.logAudit?.('CREATE_PRICEBOOK', 'PRICEBOOK', pricebook.id, {
       name: pricebook.name,
       discountPercentage: pricebook.discountPercentage,
     });
-
-    // Trigger background sync pass
-    zohoSync.runSyncPass().catch(console.error);
 
     res.status(201).json(pricebook);
   } catch (err) {
@@ -169,24 +149,7 @@ router.put('/:id', authenticateToken, requireRole('ADMIN'), async (req, res) => 
       data: dataToUpdate,
     });
 
-    // Enqueue outbox update
-    await prisma.syncJob.create({
-      data: {
-        entityType: 'PRICEBOOK',
-        localRecordId: updated.id,
-        zohoRecordId: updated.zohoPricebookId,
-        operation: 'UPDATE',
-        payload: JSON.stringify({
-          name: updated.name,
-          description: updated.description,
-          discountPercentage: updated.discountPercentage,
-          isActive: updated.isActive,
-        }),
-      },
-    });
-
     req.logAudit?.('UPDATE_PRICEBOOK', 'PRICEBOOK', updated.id, dataToUpdate);
-    zohoSync.runSyncPass().catch(console.error);
 
     res.json(updated);
   } catch (err) {

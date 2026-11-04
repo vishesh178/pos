@@ -52,24 +52,6 @@ router.post('/suppliers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'I
         },
       });
 
-      // Enqueue Zoho Books Vendor Contact
-      await tx.syncJob.create({
-        data: {
-          entityType: 'SUPPLIER',
-          localRecordId: newSup.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            contact_name: newSup.name,
-            contact_persons: newSup.contactPerson ? [{ first_name: newSup.contactPerson }] : [],
-            phone: newSup.mobile,
-            email: newSup.email,
-            gst_no: newSup.gstin,
-            contact_type: 'vendor',
-          }),
-          status: 'PENDING',
-        },
-      });
-
       return newSup;
     });
 
@@ -167,22 +149,6 @@ router.post('/orders', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVE
           },
         });
       }
-
-      // Enqueue Zoho PO Sync
-      await tx.syncJob.create({
-        data: {
-          entityType: 'PURCHASE_ORDER',
-          localRecordId: newPo.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            purchaseorder_number: poNumber,
-            supplier_id: supplierId,
-            total: grandTotal,
-            line_items: processedItems,
-          }),
-          status: 'PENDING',
-        },
-      });
 
       return newPo;
     });
@@ -342,23 +308,6 @@ router.post('/bills', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVEN
           data: { currentBalance: { increment: balanceDue } },
         });
       }
-
-      // 5. Enqueue Zoho Books Bill SyncJob
-      await tx.syncJob.create({
-        data: {
-          entityType: 'BILL',
-          localRecordId: newBill.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            bill_number: billNumber,
-            vendor_id: supplierId,
-            date: newBill.billDate,
-            total: grandTotal,
-            line_items: processedItems,
-          }),
-          status: 'PENDING',
-        },
-      });
 
       return newBill;
     });

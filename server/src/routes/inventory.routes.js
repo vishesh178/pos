@@ -142,24 +142,6 @@ router.post('/adjust', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVE
         },
       });
 
-      // 3. Enqueue Zoho Inventory adjustment SyncJob
-      await tx.syncJob.create({
-        data: {
-          entityType: 'ADJUSTMENT',
-          localRecordId: movement.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            product_id: product.id,
-            sku: product.sku,
-            zoho_item_id: product.zohoItemId,
-            adjustment_type: type === 'ADJUSTMENT_ADD' ? 'quantity_increase' : 'quantity_decrease',
-            quantity: adjustmentQty,
-            reason: notes || type,
-          }),
-          status: 'PENDING',
-        },
-      });
-
       return { product: updatedProduct, movement };
     });
 

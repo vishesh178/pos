@@ -370,25 +370,6 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTORY'
         });
       }
 
-      // Enqueue Zoho Inventory Item creation job
-      await tx.syncJob.create({
-        data: {
-          entityType: 'PRODUCT',
-          localRecordId: newProduct.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            name: newProduct.name,
-            sku: newProduct.sku,
-            rate: newProduct.sellingPrice,
-            purchase_rate: newProduct.purchasePrice,
-            hsn_or_sac: newProduct.hsnCode,
-            unit: newProduct.unit,
-            initial_stock: stockQty,
-          }),
-          status: 'PENDING',
-        },
-      });
-
       return newProduct;
     });
 
@@ -467,24 +448,6 @@ router.put('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTOR
           supplierId: supplierId !== undefined ? supplierId : undefined,
           status: status !== undefined ? status : undefined,
           zohoSyncStatus: 'PENDING',
-        },
-      });
-
-      // Enqueue Zoho Item update job
-      await tx.syncJob.create({
-        data: {
-          entityType: 'PRODUCT',
-          localRecordId: p.id,
-          zohoRecordId: p.zohoItemId || null,
-          operation: 'UPDATE',
-          payload: JSON.stringify({
-            name: p.name,
-            sku: p.sku,
-            rate: p.sellingPrice,
-            purchase_rate: p.purchasePrice,
-            hsn_or_sac: p.hsnCode,
-          }),
-          status: 'PENDING',
         },
       });
 
@@ -681,50 +644,9 @@ router.get('/export/csv', optionalAuth, async (req, res) => {
   }
 });
 
-// POST /api/products/sync-all - Queue all products for Zoho sync
+// POST /api/products/sync-all - Standalone mode (sync not required)
 router.post('/sync-all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
-  try {
-    const products = await prisma.product.findMany({
-      where: { status: 'ACTIVE' },
-    });
-
-    let queuedCount = 0;
-    for (const p of products) {
-      const existingJob = await prisma.syncJob.findFirst({
-        where: {
-          localRecordId: p.id,
-          entityType: 'PRODUCT',
-          status: { in: ['PENDING', 'PROCESSING'] },
-        },
-      });
-
-      if (!existingJob) {
-        await prisma.syncJob.create({
-          data: {
-            entityType: 'PRODUCT',
-            localRecordId: p.id,
-            operation: p.zohoItemId ? 'UPDATE' : 'CREATE',
-            payload: JSON.stringify({
-              name: p.name,
-              sku: p.sku,
-              rate: p.sellingPrice,
-              purchase_rate: p.purchasePrice,
-              hsn_or_sac: p.hsnCode,
-              unit: p.unit,
-              initial_stock: Math.max(0, p.currentStock),
-            }),
-            status: 'PENDING',
-          },
-        });
-        queuedCount++;
-      }
-    }
-
-    res.json({ message: `Queued ${queuedCount} products for Zoho sync.`, queuedCount });
-  } catch (err) {
-    console.error('Queue products error:', err);
-    res.status(500).json({ error: 'Failed to queue products for sync: ' + err.message });
-  }
+  res.json({ message: 'Catalog is stored locally in standalone mode.', queuedCount: 0 });
 });
 
 module.exports = router;

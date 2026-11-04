@@ -83,17 +83,11 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Zoho Cloud Status Pill */}
+          {/* Standalone System Status Pill */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-stone-950 border border-stone-800 text-xs">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                data.syncHealth.status === 'HEALTHY'
-                  ? 'bg-emerald-400 animate-pulse'
-                  : 'bg-amber-400'
-              }`}
-            />
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-stone-300 font-semibold text-[11px]">
-              Zoho Sync: {data.syncHealth.status}
+              System: Online
             </span>
           </div>
 

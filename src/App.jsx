@@ -16,7 +16,6 @@ import DashboardPage from './pages/DashboardPage';
 import ReportsPage from './pages/ReportsPage';
 import WholesaleCatalogPage from './pages/WholesaleCatalogPage';
 import ExpensesPage from './pages/ExpensesPage';
-import ZohoSettingsPage from './pages/ZohoSettingsPage';
 import SettingsPage from './pages/SettingsPage';
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -76,7 +75,7 @@ export default function App() {
                 <Route path="returns" element={<SalesReturnsPage />} />
                 <Route path="expenses" element={<ExpensesPage />} />
                 <Route path="reports" element={<ReportsPage />} />
-                <Route path="zoho-sync" element={<ZohoSettingsPage />} />
+                <Route path="zoho-sync" element={<Navigate to="/settings" replace />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

@@ -215,39 +215,6 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING'])
         },
       });
 
-      // 4. Enqueue Zoho SyncJob for Quote / Estimate
-      const zohoPayload = {
-        estimate_number: newEstimate.estimateNumber,
-        reference_number: newEstimate.estimateNumber,
-        date: new Date().toISOString().split('T')[0],
-        expiry_date: new Date(Date.now() + (newEstimate.validityDays || 15) * 86400000).toISOString().split('T')[0],
-        customer_name: newEstimate.customerName,
-        customer_phone: newEstimate.customerMobile,
-        customer_gstin: newEstimate.customerGstin,
-        place_of_supply: getZohoStateCode(newEstimate.placeOfSupply),
-        line_items: calc.items.map((it) => ({
-          name: it.productName,
-          sku: it.sku,
-          hsn_or_sac: it.hsnCode,
-          rate: it.unitPrice,
-          quantity: it.quantity,
-          tax_percentage: it.gstRate,
-          item_total: it.totalAmount,
-        })),
-        notes: newEstimate.notes || 'Formal quotation generated from Curated Art Showroom POS',
-        terms: '1. Quotation valid for 15 days.\n2. Prices subject to physical stock confirmation.',
-      };
-
-      await tx.syncJob.create({
-        data: {
-          entityType: 'ESTIMATE',
-          localRecordId: newEstimate.id,
-          operation: 'CREATE',
-          payload: JSON.stringify(zohoPayload),
-          status: 'PENDING',
-        },
-      });
-
       return newEstimate;
     });
 
@@ -437,37 +404,6 @@ router.post('/:id/convert', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
         },
       });
 
-      // 6. Enqueue Zoho SyncJob
-      const zohoPayload = {
-        invoice_number: newInvoice.invoiceNumber,
-        date: new Date().toISOString().split('T')[0],
-        customer_name: newInvoice.customerName,
-        customer_phone: newInvoice.customerMobile,
-        customer_gstin: newInvoice.customerGstin,
-        place_of_supply: getZohoStateCode(newInvoice.placeOfSupply),
-        estimate_id: estimate.zohoEstimateId || undefined,
-        line_items: estimate.items.map((it) => ({
-          name: it.productName,
-          sku: it.sku,
-          hsn_or_sac: it.hsnCode,
-          rate: it.unitPrice,
-          quantity: it.quantity,
-          tax_percentage: it.taxRate,
-          item_total: it.totalAmount,
-        })),
-        notes: newInvoice.notes,
-      };
-
-      await tx.syncJob.create({
-        data: {
-          entityType: 'INVOICE',
-          localRecordId: newInvoice.id,
-          operation: 'CREATE',
-          payload: JSON.stringify(zohoPayload),
-          status: 'PENDING',
-        },
-      });
-
       return newInvoice;
     });
 
@@ -511,58 +447,9 @@ router.delete('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER']), asyn
   }
 });
 
-// POST /api/estimates/:id/sync - Manually queue Zoho Quote sync
+// POST /api/estimates/:id/sync - Standalone mode (sync not required)
 router.post('/:id/sync', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
-  try {
-    const estimate = await prisma.estimate.findUnique({
-      where: { id: req.params.id },
-      include: { items: true, customer: true },
-    });
-
-    if (!estimate) {
-      return res.status(404).json({ error: 'Estimate not found' });
-    }
-
-    const zohoPayload = {
-      estimate_number: estimate.estimateNumber,
-      reference_number: estimate.estimateNumber,
-      date: estimate.createdAt.toISOString().split('T')[0],
-      expiry_date: new Date(estimate.createdAt.getTime() + (estimate.validityDays || 15) * 86400000).toISOString().split('T')[0],
-      customer_name: estimate.customerName,
-      customer_phone: estimate.customerMobile,
-      customer_gstin: estimate.customerGstin,
-      place_of_supply: getZohoStateCode(estimate.placeOfSupply),
-      line_items: estimate.items.map((it) => ({
-        name: it.productName,
-        sku: it.sku,
-        hsn_or_sac: it.hsnCode,
-        rate: it.unitPrice,
-        quantity: it.quantity,
-        tax_percentage: it.taxRate,
-        item_total: it.totalAmount,
-      })),
-      notes: estimate.notes || 'Formal quotation generated from Curated Art Showroom POS',
-      terms: '1. Quotation valid for 15 days.\n2. Prices subject to physical stock confirmation.',
-    };
-
-    const job = await prisma.syncJob.create({
-      data: {
-        entityType: 'ESTIMATE',
-        localRecordId: estimate.id,
-        operation: 'CREATE',
-        payload: JSON.stringify(zohoPayload),
-        status: 'PENDING',
-      },
-    });
-
-    const zohoSync = require('../services/zohoSyncService');
-    zohoSync.runSyncPass().catch(console.error);
-
-    res.json({ message: 'Estimate queued for Zoho Quotes sync', job });
-  } catch (err) {
-    console.error('Estimate manual sync error:', err);
-    res.status(500).json({ error: 'Failed to queue estimate sync: ' + err.message });
-  }
+  res.json({ message: 'Estimate sync is not required in standalone mode.' });
 });
 
 module.exports = router;

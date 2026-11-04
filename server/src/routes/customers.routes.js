@@ -182,16 +182,8 @@ router.get('/:id/ledger', authenticateToken, async (req, res) => {
     // Filter unpaid invoices for quick settlement
     const unpaidInvoices = invoices.filter((inv) => inv.balanceAmount > 0);
 
-    // Fetch verified Zoho contact details if connected
-    let zohoContact = null;
-    if (customer.zohoContactId) {
-      try {
-        const zohoApi = require('../services/zohoApiService');
-        zohoContact = await zohoApi.getContact(customer.zohoContactId);
-      } catch (e) {
-        // Safe fallback if offline
-      }
-    }
+    // No external Zoho contact fetch in standalone mode
+    const zohoContact = null;
 
     res.json({
       customer,
@@ -279,46 +271,12 @@ router.post('/:id/payments', authenticateToken, requireRole(['ADMIN', 'MANAGER',
             },
           });
 
-          if (inv.zohoInvoiceId) {
-            appliedZohoInvoices.push({
-              invoice_id: inv.zohoInvoiceId,
-              amount_applied: toPay,
-            });
-          }
-
           remaining -= toPay;
         }
-
-        // 4. Enqueue Zoho Books Customer Payment sync job
-        const zohoPaymentPayload = {
-          customer_id: customer.zohoContactId || undefined,
-          customer_name: customer.name,
-          customer_phone: customer.mobile,
-          amount: payAmt,
-          payment_mode: paymentMethod,
-          date: new Date().toISOString().split('T')[0],
-          reference_number: referenceNumber ? referenceNumber.trim() : undefined,
-          notes: notes ? notes.trim() : `Credit Ledger payment for ${customer.name}`,
-          invoices: appliedZohoInvoices.length > 0 ? appliedZohoInvoices : undefined,
-        };
-
-        await tx.syncJob.create({
-          data: {
-            entityType: 'CUSTOMER_PAYMENT',
-            localRecordId: payment.id,
-            operation: 'CREATE',
-            payload: JSON.stringify(zohoPaymentPayload),
-            status: 'PENDING',
-          },
-        });
       }
 
       return { payment, updatedCustomer };
     });
-
-    // Run background outbox pass immediately
-    const zohoSync = require('../services/zohoSyncService');
-    zohoSync.runSyncPass().catch(console.error);
 
     if (req.logAudit) {
       req.logAudit('RECORD_CUSTOMER_PAYMENT', 'CUSTOMER', customer.id, {
@@ -592,26 +550,6 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING'])
         include: { pricebook: true },
       });
 
-      // Enqueue Zoho Books Contact creation
-      await tx.syncJob.create({
-        data: {
-          entityType: 'CUSTOMER',
-          localRecordId: newCust.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            contact_name: newCust.name,
-            company_name: newCust.customerType !== 'RETAIL' ? newCust.name : null,
-            phone: newCust.mobile,
-            email: newCust.email,
-            gst_no: newCust.gstin,
-            billing_address: { address: newCust.billingAddress, state: newCust.state },
-            shipping_address: { address: newCust.shippingAddress, state: newCust.state },
-            contact_type: 'customer',
-          }),
-          status: 'PENDING',
-        },
-      });
-
       return newCust;
     });
 
@@ -665,22 +603,6 @@ router.put('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING'
           zohoSyncStatus: 'PENDING',
         },
         include: { pricebook: true },
-      });
-
-      await tx.syncJob.create({
-        data: {
-          entityType: 'CUSTOMER',
-          localRecordId: cust.id,
-          zohoRecordId: cust.zohoContactId || null,
-          operation: 'UPDATE',
-          payload: JSON.stringify({
-            contact_name: cust.name,
-            phone: cust.mobile,
-            email: cust.email,
-            gst_no: cust.gstin,
-          }),
-          status: 'PENDING',
-        },
       });
 
       return cust;

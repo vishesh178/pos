@@ -130,11 +130,6 @@ export default function EstimateModal({
                 >
                   {estimate.status || 'PENDING'}
                 </span>
-                {estimate.zohoEstimateId && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider bg-sky-950 text-sky-400 border border-sky-800">
-                    Zoho Quote Synced
-                  </span>
-                )}
               </div>
               <p className="text-[11px] text-stone-400 font-medium">
                 Valid until {validUntilFormatted} (15 days) • Does not deduct inventory until billed

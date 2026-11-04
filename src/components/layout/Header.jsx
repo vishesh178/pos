@@ -38,7 +38,6 @@ export default function Header({ onOpenMobileMenu }) {
     '/expenses': 'Showroom Operating Expenses',
     '/reports': 'Financial & Indian GST Reports',
     '/wholesale-catalog': 'Daily Wholesale Stock Catalog & Rate Sheet',
-    '/zoho-sync': 'Zoho Outbox & Synchronization Center',
     '/settings': 'System & Business Configuration',
   };
 
@@ -53,7 +52,6 @@ export default function Header({ onOpenMobileMenu }) {
     '/expenses': 'Expenses',
     '/reports': 'Reports',
     '/wholesale-catalog': 'Wholesale',
-    '/zoho-sync': 'Zoho Sync',
     '/settings': 'Settings',
   };
 

@@ -17,7 +17,6 @@ const zohoRoutes = require('./src/routes/zoho.routes');
 const backupRoutes = require('./src/routes/backup.routes');
 const estimatesRoutes = require('./src/routes/estimates.routes');
 const pricebooksRoutes = require('./src/routes/pricebooks.routes');
-const { startSyncScheduler } = require('./src/services/zohoSyncService');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -88,11 +87,6 @@ app.use('/api/zoho', zohoRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/estimates', estimatesRoutes);
 app.use('/api/pricebooks', pricebooksRoutes);
-
-// Start background outbox sync worker (every 30 seconds)
-if (process.env.NODE_ENV !== 'test') {
-  startSyncScheduler(30000);
-}
 
 // Serve static client build if available
 const distPath = path.resolve(__dirname, '../dist');

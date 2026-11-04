@@ -11,7 +11,6 @@ import {
   Receipt,
   BarChart3,
   RotateCcw,
-  CloudSync,
   Settings,
   LogOut,
   Sparkles,
@@ -128,7 +127,6 @@ export default function Sidebar({ isOpenMobile, onCloseMobile }) {
     { name: 'Sales Returns', path: '/returns', icon: RotateCcw, roles: ['ADMIN', 'MANAGER', 'BILLING'] },
     { name: 'Expense Tracker', path: '/expenses', icon: Receipt, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Financial & GST', path: '/reports', icon: BarChart3, roles: ['ADMIN', 'MANAGER'] },
-    { name: 'Zoho Sync Center', path: '/zoho-sync', icon: CloudSync, roles: ['ADMIN', 'MANAGER'] },
     { name: 'System Settings', path: '/settings', icon: Settings, roles: ['ADMIN'] },
   ];
 

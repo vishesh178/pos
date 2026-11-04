@@ -103,22 +103,6 @@ export default function EstimatesPage() {
     navigate('/pos');
   };
 
-  const handleSyncToZoho = async (est) => {
-    try {
-      const res = await fetch(`/api/estimates/${est.id}/sync`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to queue sync');
-      setActionMessage(`Estimate ${est.estimateNumber} queued for Zoho Quotes sync!`);
-      fetchEstimates();
-      setTimeout(() => setActionMessage(''), 4000);
-    } catch (err) {
-      alert('Sync failed: ' + err.message);
-    }
-  };
-
   const handleDeleteEstimate = async (est) => {
     if (!window.confirm(`Are you sure you want to delete estimate ${est.estimateNumber}?`)) return;
     try {
@@ -285,21 +269,20 @@ export default function EstimatesPage() {
                 <th className="py-3 px-4 text-right">Taxable</th>
                 <th className="py-3 px-4 text-right">Grand Total</th>
                 <th className="py-3 px-3 text-center">Status</th>
-                <th className="py-3 px-3 text-center">Zoho Quote</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-800/60">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="py-12 text-center text-stone-500">
+                  <td colSpan="8" className="py-12 text-center text-stone-500">
                     <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <span>Loading quotations...</span>
                   </td>
                 </tr>
               ) : estimates.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-16 text-center text-stone-500">
+                  <td colSpan="8" className="py-16 text-center text-stone-500">
                     <FileText className="w-8 h-8 text-stone-600 mx-auto mb-2" />
                     <p className="font-semibold text-stone-300">No estimates found</p>
                     <p className="text-xs text-stone-500 mt-1">
@@ -353,26 +336,6 @@ export default function EstimatesPage() {
                         <p className="text-[9px] text-emerald-500 font-mono mt-0.5">
                           {est.convertedInvoiceId}
                         </p>
-                      )}
-                    </td>
-                    <td className="py-3 px-3 text-center">
-                      {est.zohoEstimateId ? (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950/70 text-emerald-400 border border-emerald-800/80"
-                          title={`Zoho Quote ID: ${est.zohoEstimateId}`}
-                        >
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                          Synced
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleSyncToZoho(est)}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-800 hover:bg-amber-950/60 text-stone-300 hover:text-amber-400 border border-stone-700 cursor-pointer transition-colors"
-                          title="Push quote to Zoho Books"
-                        >
-                          <Clock className="w-2.5 h-2.5" />
-                          Sync Quote
-                        </button>
                       )}
                     </td>
                     <td className="py-3 px-4 text-right">

@@ -199,19 +199,6 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
                     {customer.customerType.replace('_', ' ')}
                   </span>
                 )}
-                {customer?.zohoContactId ? (
-                  <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-950 text-sky-400 border border-sky-800 flex items-center gap-1"
-                    title={`Zoho Contact ID: ${customer.zohoContactId}`}
-                  >
-                    <CheckCircle2 className="w-3 h-3 text-sky-400" />
-                    Zoho Synced
-                  </span>
-                ) : (
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-stone-800 text-stone-400">
-                    Zoho Sync Pending
-                  </span>
-                )}
               </div>
               <p className="text-xs text-stone-400 mt-0.5">
                 {customer?.mobile} • {customer?.state || 'Gujarat'} {customer?.gstin ? `• GST: ${customer.gstin}` : ''}
@@ -317,14 +304,6 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
                   <p className="text-[10px] font-semibold mt-0.5 text-stone-400">
                     {summary.netBalanceDue > 0 ? `${summary.unpaidInvoicesCount} bill(s) pending` : 'All clear (Zero due)'}
                   </p>
-                  {summary.zohoOutstanding !== null && summary.zohoOutstanding !== undefined && (
-                    <div className="mt-2 pt-1.5 border-t border-stone-800/80 flex items-center justify-between text-[10px]">
-                      <span className="text-stone-400">Zoho Books Balance:</span>
-                      <span className="font-mono font-bold text-sky-400">
-                        ₹{summary.zohoOutstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                      </span>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -461,13 +440,12 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
                         <th className="py-2.5 px-4 text-right">Debit (Billed)</th>
                         <th className="py-2.5 px-4 text-right">Credit (Paid)</th>
                         <th className="py-2.5 px-4 text-right">Running Balance</th>
-                        <th className="py-2.5 px-3 text-center">Zoho Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-800/60 font-mono text-xs">
                       {transactions.length === 0 ? (
                         <tr>
-                          <td colSpan="8" className="py-12 text-center text-stone-500 font-sans">
+                          <td colSpan="7" className="py-12 text-center text-stone-500 font-sans">
                             No ledger transactions recorded for this customer yet.
                           </td>
                         </tr>
@@ -521,19 +499,6 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
                               <span className={tx.runningBalance > 0 ? 'text-rose-400' : 'text-emerald-400'}>
                                 ₹{tx.runningBalance.toFixed(2)}
                               </span>
-                            </td>
-                            <td className="py-2.5 px-3 text-center font-sans">
-                              {tx.zohoInvoiceId || tx.zohoPaymentId ? (
-                                <span
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-sky-950 text-sky-400 border border-sky-800"
-                                  title={`Zoho Record ID: ${tx.zohoInvoiceId || tx.zohoPaymentId}`}
-                                >
-                                  <CheckCircle2 className="w-2.5 h-2.5 text-sky-400" />
-                                  Synced
-                                </span>
-                              ) : (
-                                <span className="text-[10px] text-stone-600 font-mono">—</span>
-                              )}
                             </td>
                           </tr>
                         ))

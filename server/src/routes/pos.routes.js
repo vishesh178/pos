@@ -268,36 +268,6 @@ router.post('/checkout', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BI
         });
       }
 
-      // 6. Enqueue Zoho Books SyncJob (Transactional Outbox Pattern)
-      await tx.syncJob.create({
-        data: {
-          entityType: 'INVOICE',
-          localRecordId: newInvoice.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            invoice_number: newInvoice.invoiceNumber,
-            date: new Date().toISOString().split('T')[0],
-            customer_name: newInvoice.customerName,
-            customer_phone: newInvoice.customerMobile,
-            customer_gstin: newInvoice.customerGstin,
-            place_of_supply: getZohoStateCode(newInvoice.placeOfSupply),
-            total: newInvoice.grandTotal,
-            line_items: calc.items.map((it) => ({
-              product_id: it.productId,
-              name: it.productName || it.name,
-              sku: it.sku,
-              rate: it.unitPrice,
-              quantity: it.quantity,
-              tax_percentage: it.gstRate,
-              hsn_or_sac: it.hsnCode,
-            })),
-            paid_amount: finalPaid,
-            payment_mode: paymentMethod || 'CASH',
-          }),
-          status: 'PENDING',
-        },
-      });
-
       return newInvoice;
     });
 
@@ -442,36 +412,8 @@ router.post('/invoices/:id/payment', authenticateToken, requireRole(['ADMIN', 'M
         });
       }
 
-      // 4. Enqueue Zoho Books Customer Payment sync
-      const zohoPaymentPayload = {
-        customer_id: invoice.customer?.zohoContactId || undefined,
-        customer_name: invoice.customerName,
-        customer_phone: invoice.customerMobile,
-        amount: payAmt,
-        payment_mode: paymentMethod,
-        date: new Date().toISOString().split('T')[0],
-        reference_number: payment.referenceNumber || undefined,
-        notes: notes || `Settlement for invoice ${invoice.invoiceNumber}`,
-        invoices: invoice.zohoInvoiceId
-          ? [{ invoice_id: invoice.zohoInvoiceId, amount_applied: payAmt }]
-          : undefined,
-      };
-
-      await tx.syncJob.create({
-        data: {
-          entityType: 'CUSTOMER_PAYMENT',
-          localRecordId: payment.id,
-          operation: 'CREATE',
-          payload: JSON.stringify(zohoPaymentPayload),
-          status: 'PENDING',
-        },
-      });
-
       return { payment, updatedInvoice };
     });
-
-    const zohoSync = require('../services/zohoSyncService');
-    zohoSync.runSyncPass().catch(console.error);
 
     if (req.logAudit) {
       req.logAudit('RECORD_INVOICE_PAYMENT', 'INVOICE', invoice.id, {
@@ -590,23 +532,6 @@ router.post('/returns', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BIL
           paymentMethod: refundMethod || 'CASH',
           amount: -totalRefund,
           notes: `Refund issued for sales return ${returnNumber}`,
-        },
-      });
-
-      // 4. Enqueue Zoho Credit Note SyncJob
-      await tx.syncJob.create({
-        data: {
-          entityType: 'CREDIT_NOTE',
-          localRecordId: salesReturn.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            credit_note_number: returnNumber,
-            invoice_number: invoice.invoiceNumber,
-            customer_name: invoice.customerName,
-            total: totalRefund,
-            refund_mode: refundMethod || 'CASH',
-          }),
-          status: 'PENDING',
         },
       });
 

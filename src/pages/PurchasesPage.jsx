@@ -300,13 +300,12 @@ export default function PurchasesPage() {
                   <th className="px-4 py-3 text-right">Grand Total</th>
                   <th className="px-4 py-3 text-right">Paid</th>
                   <th className="px-4 py-3 text-center">Payment Status</th>
-                  <th className="px-5 py-3 text-center">Zoho Sync</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-800 text-stone-300">
                 {bills.length === 0 ? (
                   <tr>
-                    <td colSpan="8" className="text-center py-10 text-stone-400">
+                    <td colSpan="7" className="text-center py-10 text-stone-400">
                       No purchase bills recorded yet. Click "Record Inward Bill" to receive vendor stock.
                     </td>
                   </tr>
@@ -334,11 +333,6 @@ export default function PurchasesPage() {
                           }`}
                         >
                           {b.paymentStatus}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-stone-800 text-stone-400 font-mono">
-                          {b.zohoSyncStatus}
                         </span>
                       </td>
                     </tr>

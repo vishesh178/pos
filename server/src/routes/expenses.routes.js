@@ -73,23 +73,6 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (re
         },
       });
 
-      // Enqueue Zoho Books Expense
-      await tx.syncJob.create({
-        data: {
-          entityType: 'EXPENSE',
-          localRecordId: newExp.id,
-          operation: 'CREATE',
-          payload: JSON.stringify({
-            account_name: newExp.category,
-            date: newExp.expenseDate.toISOString().split('T')[0],
-            amount: newExp.amount,
-            description: `${newExp.title}: ${newExp.description || ''}`,
-            paid_through_account_name: newExp.paymentMethod === 'CASH' ? 'Petty Cash' : 'Undeposited Funds',
-          }),
-          status: 'PENDING',
-        },
-      });
-
       return newExp;
     });
 

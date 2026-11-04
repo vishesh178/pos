@@ -1405,7 +1405,7 @@ export default function POSPage() {
                       className="w-4 h-4 rounded text-amber-500 bg-stone-950 border-stone-700"
                     />
                     <span className="text-stone-300 text-xs font-semibold">
-                      Save to Customer Directory & sync to Zoho for future visits
+                      Save to Customer Directory for future visits
                     </span>
                   </label>
 
