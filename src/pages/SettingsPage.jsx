@@ -17,6 +17,7 @@ import {
   HardDrive,
   ShieldCheck,
   Clock,
+  Upload,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -55,6 +56,7 @@ export default function SettingsPage() {
   const [backupStatus, setBackupStatus] = useState(null);
   const [backupLoading, setBackupLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [restoringFile, setRestoringFile] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -235,6 +237,41 @@ export default function SettingsPage() {
       loadData();
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleUploadRestore = async (file) => {
+    if (!file) return;
+    if (
+      !window.confirm(
+        `RESTORE WARNING: Overwrite active database with "${file.name}"?\n\nAll current records will be replaced with the contents of this backup file. (A safety backup of the current database will be saved to the vault automatically).`
+      )
+    ) {
+      return;
+    }
+
+    setRestoringFile(true);
+    const formData = new FormData();
+    formData.append('backupFile', file);
+
+    try {
+      const res = await fetch('/api/backup/upload-restore', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to restore database');
+
+      alert(data.message);
+      loadData();
+    } catch (err) {
+      alert('Restore failed: ' + err.message);
+    } finally {
+      setRestoringFile(false);
     }
   };
 
@@ -592,6 +629,25 @@ export default function SettingsPage() {
                   <Database className="w-3.5 h-3.5 text-stone-400" />
                   <span>{backupLoading ? 'Saving...' : 'Vault Snapshot'}</span>
                 </button>
+
+                <label
+                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-stone-900 border border-stone-700 hover:border-amber-500 hover:text-amber-300 text-stone-300 font-semibold text-xs transition-colors cursor-pointer"
+                  title="Upload a downloaded .sqlite or .enc backup from your laptop to restore your data"
+                >
+                  <Upload className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{restoringFile ? 'Restoring...' : 'Upload & Restore'}</span>
+                  <input
+                    type="file"
+                    accept=".sqlite,.db,.enc"
+                    className="hidden"
+                    disabled={restoringFile}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleUploadRestore(f);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const multer = require('multer');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { encryptBuffer, decryptBuffer } = require('../utils/crypto');
 
@@ -8,11 +9,20 @@ const router = express.Router();
 
 const DB_PATH = path.resolve(__dirname, '../../database/curated_art.db');
 const BACKUPS_DIR = path.resolve(__dirname, '../../database/backups');
+const TEMP_DIR = path.join(BACKUPS_DIR, 'temp');
 
-// Ensure backups directory exists
+// Ensure backups and temp directories exist
 if (!fs.existsSync(BACKUPS_DIR)) {
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 }
+if (!fs.existsSync(TEMP_DIR)) {
+  fs.mkdirSync(TEMP_DIR, { recursive: true });
+}
+
+const upload = multer({
+  dest: TEMP_DIR,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB max
+});
 
 // Helper: validate filename to prevent directory traversal
 function isSafeFilename(name) {
@@ -251,6 +261,64 @@ router.delete('/:fileName', authenticateToken, requireRole('ADMIN'), async (req,
   } catch (err) {
     console.error('Delete backup error:', err);
     res.status(500).json({ error: 'Failed to delete backup: ' + err.message });
+  }
+});
+
+// POST /api/backup/upload-restore - Upload a downloaded .sqlite or .enc backup from laptop and restore
+router.post('/upload-restore', authenticateToken, requireRole('ADMIN'), upload.single('backupFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No backup file uploaded.' });
+    }
+
+    const tempPath = req.file.path;
+    const originalName = req.file.originalname || `uploaded_backup_${Date.now()}.sqlite`;
+
+    if (!originalName.endsWith('.sqlite') && !originalName.endsWith('.db') && !originalName.endsWith('.enc')) {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+      return res.status(400).json({ error: 'Invalid file type. Please upload a .sqlite or .enc backup file.' });
+    }
+
+    // Safety snapshot of active database before overwrite
+    const safetySnapshot = path.join(BACKUPS_DIR, `safety_before_upload_restore_${Date.now()}.sqlite`);
+    if (fs.existsSync(DB_PATH)) {
+      fs.copyFileSync(DB_PATH, safetySnapshot);
+    }
+
+    // If encrypted, decrypt first
+    if (originalName.endsWith('.enc')) {
+      const encBuffer = fs.readFileSync(tempPath);
+      const decBuffer = decryptBuffer(encBuffer);
+      if (!decBuffer) {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        return res.status(400).json({ error: 'Decryption failed: could not decrypt encrypted backup file.' });
+      }
+      fs.writeFileSync(DB_PATH, decBuffer);
+    } else {
+      fs.copyFileSync(tempPath, DB_PATH);
+    }
+
+    // Also archive the uploaded backup into the vault for future use
+    const archivedVaultName = `uploaded_${Date.now()}_${path.basename(originalName)}`;
+    fs.renameSync(tempPath, path.join(BACKUPS_DIR, archivedVaultName));
+
+    req.logAudit?.('RESTORE_DATABASE_FROM_UPLOAD', 'SYSTEM', null, {
+      originalName,
+      archivedVaultName,
+      sizeBytes: req.file.size,
+    });
+
+    res.json({
+      success: true,
+      message: `Database successfully restored from "${originalName}". All invoices, products, and customer records are now active.`,
+      restoredFrom: originalName,
+    });
+  } catch (err) {
+    console.error('Upload & restore error:', err);
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
+    res.status(500).json({ error: 'Failed to restore database from uploaded file: ' + err.message });
   }
 });
 
