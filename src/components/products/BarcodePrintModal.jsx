@@ -36,9 +36,7 @@ export default function BarcodePrintModal({ isOpen, onClose, product, products =
     showHsn: false,
   });
 
-  if (!isOpen || productList.length === 0) return null;
-
-  // Calculate expanded list of all stickers to print
+  // Calculate expanded list of all stickers to print (must be called unconditionally before early returns)
   const allStickers = useMemo(() => {
     const list = [];
     productList.forEach((p) => {
@@ -49,6 +47,8 @@ export default function BarcodePrintModal({ isOpen, onClose, product, products =
     });
     return list;
   }, [productList, quantities]);
+
+  if (!isOpen || productList.length === 0) return null;
 
   const totalLabels = allStickers.length;
   const labelsPerPage = layout === 'a4_24' ? 24 : layout === 'a4_30' ? 30 : 1;
