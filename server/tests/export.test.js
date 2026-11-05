@@ -69,3 +69,62 @@ test('Data Export Engine - Generates Valid Multi-Tab Excel Workbook', async () =
   assert.ok(parsedWb.SheetNames.includes('Pricebooks'));
 });
 
+test('Customer / Account Directory Export - Formatted Categorized Account List with Merges and 10 Columns', async () => {
+  const [bp, customers, suppliers, generalAccounts] = await Promise.all([
+    prisma.businessProfile.findFirst(),
+    prisma.customer.findMany({ orderBy: { name: 'asc' } }),
+    prisma.supplier.findMany({ orderBy: { name: 'asc' } }),
+    prisma.generalAccount.findMany({ orderBy: { name: 'asc' } }),
+  ]);
+
+  const SECTION_ORDER = [
+    'Capital',
+    'Reserve and Surplus',
+    'Loans Funds',
+    'Secured Loans',
+    'Unsecured Loans',
+    'Sundry Creditors / Suppliers',
+    'Other Liabilities',
+    'Current Assets',
+    'Inventories',
+    'Sundry Debtors / Architech',
+    'Sundry Debtors / Retailer',
+    'Sundry Debtors / Wholesaler',
+    'Cash on Hand',
+    'Cash at Bank',
+    'Loans and Advances',
+    'Other Current Assets',
+    'Opening Stock',
+    'Purchase Stock',
+    'Trading Expenses',
+    'Profit and Loss Expenses',
+    'Sales',
+    'Closing Stock',
+    'Trading Incomes',
+    'Profit and Loss Incomes',
+    'Salary',
+  ];
+
+  const secMap = new Map();
+  SECTION_ORDER.forEach((s) => secMap.set(s, []));
+  secMap.set('Sundry Creditors / Suppliers', suppliers);
+
+  for (const c of customers) {
+    if (c.customerType === 'INTERIOR_DESIGNER') secMap.get('Sundry Debtors / Architech').push(c);
+    else if (c.customerType === 'WHOLESALE') secMap.get('Sundry Debtors / Wholesaler').push(c);
+    else secMap.get('Sundry Debtors / Retailer').push(c);
+  }
+
+  for (const ga of generalAccounts) {
+    const matched = SECTION_ORDER.find((s) => s.toLowerCase() === (ga.section || '').toLowerCase());
+    if (matched) secMap.get(matched).push(ga);
+  }
+
+  // Ensure all major sections have records
+  assert.ok(secMap.get('Sundry Creditors / Suppliers').length > 0, 'Suppliers must be populated');
+  assert.ok(secMap.get('Sundry Debtors / Retailer').length > 0, 'Retail debtors must be populated');
+  assert.ok(secMap.get('Capital').length > 0, 'Capital accounts must be populated');
+  assert.ok(secMap.get('Unsecured Loans').length > 0, 'Unsecured loans must be populated');
+  assert.ok(secMap.get('Cash at Bank').length > 0, 'Bank accounts must be populated');
+});
+

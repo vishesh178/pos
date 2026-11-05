@@ -140,6 +140,10 @@ model Supplier {
   address        String?
   state          String?         @default("Gujarat")
   stateCode      String?         @default("24")
+  pincode        String?
+  panNo          String?
+  msmeNo         String?
+  gstDate        String?
   openingBalance Float           @default(0.0)
   currentBalance Float           @default(0.0)
   zohoContactId  String?
@@ -463,8 +467,11 @@ model GeneralAccount {
   address        String?
   state          String?  @default("Gujarat")
   stateCode      String?  @default("24")
+  pincode        String?
   gstin          String?
+  gstDate        String?
   panNo          String?
+  msmeNo         String?
   notes          String?
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())

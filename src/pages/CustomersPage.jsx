@@ -301,17 +301,33 @@ export default function CustomersPage() {
                 setIsExporting(true);
                 await downloadExportFile(
                   '/api/export/customers?format=xlsx',
-                  'curated_art_customers.xlsx',
+                  'GOKUL_TRADERS-Account_List.xlsx',
                   token
                 );
                 setIsExporting(false);
               }}
               disabled={isExporting}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-200 hover:text-amber-400 text-xs font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50"
-              title="Export all customers to Excel (.xlsx)"
+              title="Export categorized account list to Excel (.xlsx)"
             >
               <Download className={`w-3.5 h-3.5 text-amber-500 ${isExporting ? 'animate-bounce' : ''}`} />
-              <span>{isExporting ? 'Exporting...' : 'Export'}</span>
+              <span>{isExporting ? 'Exporting...' : 'Export Excel'}</span>
+            </button>
+            <button
+              onClick={async () => {
+                setIsExporting(true);
+                await downloadExportFile(
+                  '/api/export/customers?format=csv',
+                  'GOKUL_TRADERS-Account_List.csv',
+                  token
+                );
+                setIsExporting(false);
+              }}
+              disabled={isExporting}
+              className="flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 text-xs font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50"
+              title="Export categorized account list to CSV (.csv)"
+            >
+              <span>CSV</span>
             </button>
             <button
               onClick={() => setIsImportModalOpen(true)}

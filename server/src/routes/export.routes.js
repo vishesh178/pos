@@ -96,10 +96,14 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Contact Person': s.contactPerson || '',
       'Mobile': s.mobile,
       'Email': s.email || '',
-      'GSTIN': s.gstin || '',
       'Address': s.address || '',
       'State': s.state || 'Gujarat',
       'State Code': s.stateCode || '24',
+      'Pincode': s.pincode || '',
+      'GSTIN': s.gstin || '',
+      'GST Date': s.gstDate || '',
+      'PAN No': s.panNo || '',
+      'MSME No': s.msmeNo || '',
       'Outstanding Balance (₹)': s.currentBalance || 0,
       'Opening Balance (₹)': s.openingBalance || 0,
     }));
@@ -216,40 +220,200 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
   }
 });
 
-// 2. GET /api/export/customers - Export Customers Only (.xlsx or .csv)
+// 2. GET /api/export/customers - Export Categorized Account Master List (.xlsx or .csv)
 router.get('/customers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
   try {
     const format = req.query.format === 'csv' ? 'csv' : 'xlsx';
-    const customers = await prisma.customer.findMany({
-      include: { pricebook: true },
-      orderBy: { name: 'asc' },
-    });
+    const mode = req.query.mode || 'categorized';
 
-    const rows = customers.map((c) => ({
-      'Account Name': c.name,
-      'Mobile Nos.': c.mobile,
-      'Email': c.email || '',
-      'Address': c.billingAddress || '',
-      'Shipping Address': c.shippingAddress || '',
-      'State': c.state || 'Gujarat',
-      'State Code': c.stateCode || '24',
-      'Pincode': c.pincode || '',
-      'GST No.': c.gstin || '',
-      'GST Date': c.gstDate || '',
-      'PAN No.': c.panNo || '',
-      'MSME No.': c.msmeNo || '',
-      'Customer Type': c.customerType || 'RETAIL',
-      'Pricebook': c.pricebook?.name || 'Default MRP',
-      'Current Balance': c.currentBalance || 0,
-      'Opening Balance': c.openingBalance || 0,
-    }));
+    if (mode === 'flat') {
+      const customers = await prisma.customer.findMany({
+        include: { pricebook: true },
+        orderBy: { name: 'asc' },
+      });
+
+      const rows = customers.map((c) => ({
+        'Account Name': c.name,
+        'Mobile Nos.': c.mobile,
+        'Email': c.email || '',
+        'Address': c.billingAddress || '',
+        'Shipping Address': c.shippingAddress || '',
+        'State': c.state || 'Gujarat',
+        'State Code': c.stateCode || '24',
+        'Pincode': c.pincode || '',
+        'GST No.': c.gstin || '',
+        'GST Date': c.gstDate || '',
+        'PAN No.': c.panNo || '',
+        'MSME No.': c.msmeNo || '',
+        'Customer Type': c.customerType || 'RETAIL',
+        'Pricebook': c.pricebook?.name || 'Default MRP',
+        'Current Balance': c.currentBalance || 0,
+        'Opening Balance': c.openingBalance || 0,
+      }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Customers');
+      return sendSpreadsheet(res, wb, 'customers_export', format);
+    }
+
+    // Default: Full Categorized Account Master List matching Tally master layout
+    const [bp, customers, suppliers, generalAccounts] = await Promise.all([
+      prisma.businessProfile.findFirst(),
+      prisma.customer.findMany({ orderBy: { name: 'asc' } }),
+      prisma.supplier.findMany({ orderBy: { name: 'asc' } }),
+      prisma.generalAccount.findMany({ orderBy: { name: 'asc' } }),
+    ]);
+
+    const companyName =
+      bp?.businessName && bp.businessName !== 'Curated Art'
+        ? bp.businessName
+        : 'GOKUL TRADERS';
+    const address =
+      bp?.address && !bp.address.includes('Showroom #104')
+        ? bp.address
+        : 'B/28, PANCHDEV SOCIETY, VARACHHA ROAD, Surat';
+    const phone =
+      bp?.phone && !bp.phone.includes('+91 98765')
+        ? bp.phone
+        : 'Ph.: 9879295847';
+    const gstin =
+      bp?.gstin && !bp.gstin.includes('24AAAAA')
+        ? `GSTIN : ${bp.gstin}`
+        : 'GSTIN : 24AJYPP3599C1ZL';
+
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    const startYear = currentMonth >= 3 ? currentYear : currentYear - 1;
+    const accountingYear = `Accounting Year : ${startYear} - ${startYear + 1}`;
+
+    const rows = [
+      [companyName, '', '', '', '', '', '', '', '', ''],
+      [address, '', '', '', '', '', '', '', '', ''],
+      [phone.startsWith('Ph.') ? phone : `Ph.: ${phone}`, '', '', '', '', '', '', '', '', ''],
+      [gstin.startsWith('GSTIN') ? gstin : `GSTIN : ${gstin}`, '', '', '', '', '', '', '', '', ''],
+      [accountingYear, '', '', '', '', '', '', '', '', ''],
+      [' ', '', '', '', '', '', '', '', '', ''],
+      ['Account List', '', '', '', '', '', '', '', '', ''],
+      ['.', '', '', '', '', '', '', '', '', ''],
+      [' ', '', '', '', '', '', '', '', '', ''],
+      ['Account Name', 'Address', 'Mobile Nos.', 'State', 'State Code', 'Pincode', 'GST No.', 'GST Date', 'PAN No.', 'MSME No.'],
+    ];
+
+    const merges = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } },
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } },
+      { s: { r: 2, c: 0 }, e: { r: 2, c: 9 } },
+      { s: { r: 3, c: 0 }, e: { r: 3, c: 9 } },
+      { s: { r: 4, c: 0 }, e: { r: 4, c: 9 } },
+      { s: { r: 5, c: 0 }, e: { r: 5, c: 9 } },
+      { s: { r: 6, c: 0 }, e: { r: 6, c: 9 } },
+      { s: { r: 7, c: 0 }, e: { r: 7, c: 9 } },
+      { s: { r: 8, c: 0 }, e: { r: 8, c: 9 } },
+    ];
+
+    const SECTION_ORDER = [
+      'Capital',
+      'Reserve and Surplus',
+      'Loans Funds',
+      'Secured Loans',
+      'Unsecured Loans',
+      'Sundry Creditors / Suppliers',
+      'Other Liabilities',
+      'Current Assets',
+      'Inventories',
+      'Sundry Debtors / Architech',
+      'Sundry Debtors / Retailer',
+      'Sundry Debtors / Wholesaler',
+      'Cash on Hand',
+      'Cash at Bank',
+      'Loans and Advances',
+      'Other Current Assets',
+      'Opening Stock',
+      'Purchase Stock',
+      'Trading Expenses',
+      'Profit and Loss Expenses',
+      'Sales',
+      'Closing Stock',
+      'Trading Incomes',
+      'Profit and Loss Incomes',
+      'Salary',
+    ];
+
+    const secMap = new Map();
+    SECTION_ORDER.forEach((s) => secMap.set(s, []));
+
+    secMap.set('Sundry Creditors / Suppliers', suppliers);
+
+    for (const c of customers) {
+      if (c.customerType === 'INTERIOR_DESIGNER') {
+        secMap.get('Sundry Debtors / Architech').push(c);
+      } else if (c.customerType === 'WHOLESALE') {
+        secMap.get('Sundry Debtors / Wholesaler').push(c);
+      } else {
+        secMap.get('Sundry Debtors / Retailer').push(c);
+      }
+    }
+
+    for (const ga of generalAccounts) {
+      const matched = SECTION_ORDER.find((s) => s.toLowerCase() === (ga.section || '').toLowerCase());
+      if (matched) {
+        secMap.get(matched).push(ga);
+      } else {
+        const extra = ga.section || 'Other Accounts';
+        if (!secMap.has(extra)) secMap.set(extra, []);
+        secMap.get(extra).push(ga);
+      }
+    }
+
+    for (const [section, items] of secMap.entries()) {
+      if (items.length === 0) continue;
+      const headerRowIdx = rows.length;
+      rows.push([section, '', '', '', '', '', '', '', '', '']);
+      merges.push({ s: { r: headerRowIdx, c: 0 }, e: { r: headerRowIdx, c: 9 } });
+
+      for (const it of items) {
+        const name = it.name || '';
+        const addr = it.billingAddress || it.address || '';
+        const mob = it.mobile && it.mobile !== '-' ? it.mobile : '';
+        const st = it.state || 'Gujarat';
+        const sc = it.stateCode || '24';
+        const pin = it.pincode || '';
+        const gst = it.gstin || '';
+        const gstd = it.gstDate || '';
+        const pan = it.panNo || (gst && gst.length === 15 ? gst.substring(2, 12) : '');
+        const msme = it.msmeNo || '';
+        rows.push([name, addr, mob, st, sc, pin, gst, gstd, pan, msme]);
+      }
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!merges'] = merges;
+    ws['!cols'] = [
+      { wch: 38 },
+      { wch: 45 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 11 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 14 },
+      { wch: 14 },
+    ];
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Customers');
-    sendSpreadsheet(res, wb, 'customers_export', format);
+    XLSX.utils.book_append_sheet(wb, ws, 'Account List');
+
+    req.logAudit?.('EXPORT_ACCOUNT_LIST', 'SYSTEM', null, {
+      totalRows: rows.length,
+      sections: secMap.size,
+      format,
+    });
+
+    sendSpreadsheet(res, wb, 'GOKUL_TRADERS-Account_List', format);
   } catch (err) {
     console.error('Export customers error:', err);
-    res.status(500).json({ error: 'Failed to export customers: ' + err.message });
+    res.status(500).json({ error: 'Failed to export accounts: ' + err.message });
   }
 });
 
@@ -299,10 +463,14 @@ router.get('/suppliers', authenticateToken, requireRole(['ADMIN', 'MANAGER']), a
       'Contact Person': s.contactPerson || '',
       'Mobile Nos.': s.mobile,
       'Email': s.email || '',
-      'GST No.': s.gstin || '',
       'Address': s.address || '',
       'State': s.state || 'Gujarat',
       'State Code': s.stateCode || '24',
+      'Pincode': s.pincode || '',
+      'GST No.': s.gstin || '',
+      'GST Date': s.gstDate || '',
+      'PAN No.': s.panNo || '',
+      'MSME No.': s.msmeNo || '',
       'Current Balance': s.currentBalance || 0,
       'Opening Balance': s.openingBalance || 0,
     }));
