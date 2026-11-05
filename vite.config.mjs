@@ -12,7 +12,7 @@ const stripCrossoriginPlugin = () => ({
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: '/',
+  base: './',
   plugins: [react(), tailwindcss(), stripCrossoriginPlugin()],
   resolve: {
     alias: {
