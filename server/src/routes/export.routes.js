@@ -422,3 +422,4 @@ router.get('/expenses', authenticateToken, requireRole(['ADMIN', 'MANAGER']), as
 });
 
 module.exports = router;
+

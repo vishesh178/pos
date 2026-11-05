@@ -166,3 +166,156 @@ test('POS / Manual Customer Creation - Optional Mobile & All 10 Excel Fields', a
   // Clean up
   await prisma.customer.deleteMany({ where: { name: custName } });
 });
+
+test('Smart Multi-Entity Master Account Import - Routes to Suppliers, Customers (Tiers), and Excludes General Ledgers', async () => {
+  const router = require('../src/routes/customers.routes');
+  const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+  assert.ok(admin);
+
+  const testPayload = [
+    {
+      name: 'TEST SUPPLIER DHARMANAND ART',
+      section: 'Sundry Creditors / Suppliers',
+      address: 'SURAT, GUJARAT',
+      mobile: '9898011223',
+      state: 'Gujarat',
+      stateCode: '24',
+      gstin: '24AABCA1122C1Z4',
+    },
+    {
+      name: 'TEST WHOLESALER JAY AMBE DECOR',
+      section: 'Sundry Debtors / Wholesaler',
+      address: 'MORBI, GUJARAT',
+      mobile: '9825022334',
+      state: 'Gujarat',
+      stateCode: '24',
+      gstin: '24AABCB2233C1Z5',
+    },
+    {
+      name: 'TEST ARCHITECT PRIYANKA SHAH',
+      section: 'Sundry Debtors / Architech',
+      address: 'AHMEDABAD',
+      mobile: '9879033445',
+      state: 'Gujarat',
+      stateCode: '24',
+    },
+    {
+      name: 'TEST RETAILER JINAL TRADERS',
+      section: 'Sundry Debtors / Retailer',
+      address: 'BARODA',
+      mobile: '9898044556',
+      state: 'Gujarat',
+      stateCode: '24',
+    },
+    {
+      name: 'TEST HDFC BANK CAR LOAN',
+      section: 'Loans Funds',
+      address: '',
+      mobile: '',
+    },
+    {
+      name: 'TEST PARTNER CAPITAL ACCOUNT',
+      section: 'Capital',
+      address: '',
+      mobile: '',
+    },
+  ];
+
+  const allNames = testPayload.map((p) => p.name);
+  await prisma.customer.deleteMany({ where: { name: { in: allNames } } });
+  await prisma.supplier.deleteMany({ where: { name: { in: allNames } } });
+
+  // Simulate an accidental pre-existing misrouted customer for the supplier
+  await prisma.customer.create({
+    data: {
+      name: 'TEST SUPPLIER DHARMANAND ART',
+      mobile: '9898011223',
+      customerType: 'RETAIL',
+    },
+  });
+
+  const route = router.stack.find((s) => s.route && s.route.path === '/bulk-import').route;
+  const handler = route.stack[route.stack.length - 1].handle;
+
+  let responseData = null;
+  const req = {
+    body: {
+      items: testPayload,
+      overwriteExisting: true,
+      cleanupMisrouted: true,
+    },
+    user: admin,
+  };
+  const res = {
+    status(code) {
+      this.statusCode = code;
+      return this;
+    },
+    json(data) {
+      responseData = data;
+      return this;
+    },
+  };
+
+  try {
+    await handler(req, res);
+
+    assert.ok(responseData, 'Response data must be returned');
+    assert.equal(responseData.success, true);
+    assert.equal(responseData.importedSuppliers, 1);
+    assert.equal(responseData.importedCustomers, 3);
+    assert.equal(responseData.categorizedLedgers, 2);
+    assert.ok(responseData.cleanedMisrouted >= 1);
+
+    // 1. Verify Supplier was created in Supplier table
+    const sup = await prisma.supplier.findFirst({
+      where: { name: 'TEST SUPPLIER DHARMANAND ART' },
+    });
+    assert.ok(sup, 'Supplier must exist in prisma.supplier');
+    assert.equal(sup.gstin, '24AABCA1122C1Z4');
+
+    // 2. Verify Misrouted Supplier was REMOVED from Customer table
+    const misrouted = await prisma.customer.findFirst({
+      where: { name: 'TEST SUPPLIER DHARMANAND ART' },
+    });
+    assert.equal(misrouted, null, 'Misrouted supplier must be cleaned from Customer table');
+
+    // 3. Verify Wholesaler has customerType WHOLESALE & Wholesale pricebook
+    const whol = await prisma.customer.findFirst({
+      where: { name: 'TEST WHOLESALER JAY AMBE DECOR' },
+      include: { pricebook: true },
+    });
+    assert.ok(whol);
+    assert.equal(whol.customerType, 'WHOLESALE');
+    assert.equal(whol.pricebook?.code, 'WHOLESALE');
+
+    // 4. Verify Architect has customerType INTERIOR_DESIGNER & Designer pricebook
+    const arch = await prisma.customer.findFirst({
+      where: { name: 'TEST ARCHITECT PRIYANKA SHAH' },
+      include: { pricebook: true },
+    });
+    assert.ok(arch);
+    assert.equal(arch.customerType, 'INTERIOR_DESIGNER');
+    assert.equal(arch.pricebook?.code, 'DESIGNER');
+
+    // 5. Verify Retailer has customerType RETAIL
+    const ret = await prisma.customer.findFirst({
+      where: { name: 'TEST RETAILER JINAL TRADERS' },
+    });
+    assert.ok(ret);
+    assert.equal(ret.customerType, 'RETAIL');
+
+    // 6. Verify Loan and Capital accounts were NEVER created in Customer table
+    const loan = await prisma.customer.findFirst({
+      where: { name: 'TEST HDFC BANK CAR LOAN' },
+    });
+    const cap = await prisma.customer.findFirst({
+      where: { name: 'TEST PARTNER CAPITAL ACCOUNT' },
+    });
+    assert.equal(loan, null, 'Loan account must never be added to Customer directory');
+    assert.equal(cap, null, 'Capital account must never be added to Customer directory');
+  } finally {
+    await prisma.customer.deleteMany({ where: { name: { in: allNames } } });
+    await prisma.supplier.deleteMany({ where: { name: { in: allNames } } });
+  }
+});

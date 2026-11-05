@@ -63,3 +63,4 @@ test('Data Export Engine - Generates Valid Multi-Tab Excel Workbook', async () =
   assert.ok(parsedWb.SheetNames.includes('Expenses'));
   assert.ok(parsedWb.SheetNames.includes('Pricebooks'));
 });
+

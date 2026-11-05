@@ -298,18 +298,19 @@ router.post('/:id/payments', authenticateToken, requireRole(['ADMIN', 'MANAGER',
   }
 });
 
-// POST /api/customers/bulk-import - Bulk import customers from Excel / CSV with strict deduplication
+// POST /api/customers/bulk-import - Smart Multi-Entity Account & Party Importer with Section Routing
 router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
   try {
-    const { items, overwriteExisting = false } = req.body;
+    const { items, overwriteExisting = false, cleanupMisrouted = true } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Valid items array is required for bulk import.' });
     }
 
     const defaultPb = await prisma.pricebook.findFirst({ where: { isDefault: true } });
     const designerPb = await prisma.pricebook.findUnique({ where: { code: 'DESIGNER' } });
+    const wholesalePb = await prisma.pricebook.findUnique({ where: { code: 'WHOLESALE' } });
 
-    // Fetch existing customer directory for instant in-memory deduplication check
+    // Fetch existing customer directory for in-memory deduplication & misroute cleanup
     const existingCustomers = await prisma.customer.findMany({
       select: {
         id: true,
@@ -340,32 +341,136 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
       if (c.panNo) existingByPan.set(c.panNo.trim().toUpperCase(), c);
     }
 
-    let imported = 0;
-    let updated = 0;
-    let skipped = 0;
+    // Fetch existing supplier directory for in-memory deduplication
+    const existingSuppliers = await prisma.supplier.findMany({
+      select: {
+        id: true,
+        name: true,
+        mobile: true,
+        gstin: true,
+        address: true,
+        state: true,
+        stateCode: true,
+      },
+    });
+
+    const existingSuppliersByName = new Map();
+    const existingSuppliersByMobile = new Map();
+    const existingSuppliersByGst = new Map();
+
+    for (const s of existingSuppliers) {
+      if (s.name) existingSuppliersByName.set(s.name.trim().toLowerCase(), s);
+      if (s.mobile && s.mobile !== '-') existingSuppliersByMobile.set(s.mobile.trim(), s);
+      if (s.gstin) existingSuppliersByGst.set(s.gstin.trim().toUpperCase(), s);
+    }
+
+    let importedCustomers = 0;
+    let updatedCustomers = 0;
+    let skippedCustomers = 0;
+
+    let importedSuppliers = 0;
+    let updatedSuppliers = 0;
+    let skippedSuppliers = 0;
+
+    let categorizedLedgers = 0;
+    let cleanedMisrouted = 0;
+
+    const breakdown = {
+      retailers: 0,
+      wholesalers: 0,
+      architects: 0,
+      corporate: 0,
+      suppliers: 0,
+      generalLedgers: 0,
+    };
 
     const seenInCurrentBatch = new Set();
 
+    // Helper: auto-detect routing based on targetEntity, section name, or customerType
+    function getEntityRouting(item) {
+      if (item.targetEntity) {
+        return {
+          target: item.targetEntity,
+          customerType: item.customerType || 'RETAIL',
+        };
+      }
+
+      const sec = String(item.section || '').toLowerCase().trim();
+      if (sec.includes('sundry creditor') || sec.includes('supplier') || sec.includes('vendor')) {
+        return { target: 'SUPPLIER', customerType: null };
+      }
+      if (sec.includes('sundry debtor') || sec.includes('debtor')) {
+        if (sec.includes('wholesal')) {
+          return { target: 'CUSTOMER', customerType: 'WHOLESALE' };
+        }
+        if (sec.includes('architech') || sec.includes('architect') || sec.includes('designer')) {
+          return { target: 'CUSTOMER', customerType: 'INTERIOR_DESIGNER' };
+        }
+        return { target: 'CUSTOMER', customerType: item.gstin ? 'CORPORATE' : 'RETAIL' };
+      }
+      if (
+        sec.includes('capital') ||
+        sec.includes('loan') ||
+        sec.includes('bank') ||
+        sec.includes('cash') ||
+        sec.includes('expense') ||
+        sec.includes('liability') ||
+        sec.includes('asset') ||
+        sec.includes('p&l') ||
+        sec.includes('profit and loss') ||
+        sec.includes('trading') ||
+        sec.includes('salary') ||
+        sec.includes('stock') ||
+        sec.includes('sales')
+      ) {
+        return { target: 'ACCOUNTING_LEDGER', customerType: null };
+      }
+
+      return {
+        target: 'CUSTOMER',
+        customerType: item.customerType || (item.gstin ? 'CORPORATE' : 'RETAIL'),
+      };
+    }
+
     for (const item of items) {
       if (!item.name || !item.name.trim()) {
-        skipped++;
         continue;
       }
 
       const cleanName = item.name.trim();
       const nameKey = cleanName.toLowerCase();
-      let cleanMobile = (item.mobile && item.mobile.toString().trim()) ? item.mobile.toString().replace(/\.0$/, '').trim() : '-';
+      let cleanMobile =
+        item.mobile && item.mobile.toString().trim()
+          ? item.mobile.toString().replace(/\.0$/, '').trim()
+          : '-';
       if (!cleanMobile || cleanMobile === '0' || cleanMobile.toLowerCase() === 'nan') {
         cleanMobile = '-';
       }
 
-      const cleanGstin = item.gstin && item.gstin.toString().trim() ? item.gstin.toString().trim().toUpperCase() : null;
-      const cleanPan = item.panNo && item.panNo.toString().trim() ? item.panNo.toString().trim().toUpperCase() : (cleanGstin && cleanGstin.length === 15 ? cleanGstin.substring(2, 12) : null);
-      const cleanMsme = item.msmeNo && item.msmeNo.toString().trim() ? item.msmeNo.toString().trim() : null;
-      const cleanGstDate = item.gstDate && item.gstDate.toString().trim() ? item.gstDate.toString().trim() : null;
-      const cleanPincode = item.pincode && item.pincode.toString().trim() ? item.pincode.toString().replace(/\.0$/, '').trim() : null;
-      const cleanState = item.state && item.state.toString().trim() ? item.state.toString().trim() : 'Gujarat';
-      let cleanStateCode = item.stateCode && item.stateCode.toString().trim() ? item.stateCode.toString().replace(/\.0$/, '').trim() : '24';
+      const cleanGstin =
+        item.gstin && item.gstin.toString().trim()
+          ? item.gstin.toString().trim().toUpperCase()
+          : null;
+      const cleanPan =
+        item.panNo && item.panNo.toString().trim()
+          ? item.panNo.toString().trim().toUpperCase()
+          : cleanGstin && cleanGstin.length === 15
+          ? cleanGstin.substring(2, 12)
+          : null;
+      const cleanMsme =
+        item.msmeNo && item.msmeNo.toString().trim() ? item.msmeNo.toString().trim() : null;
+      const cleanGstDate =
+        item.gstDate && item.gstDate.toString().trim() ? item.gstDate.toString().trim() : null;
+      const cleanPincode =
+        item.pincode && item.pincode.toString().trim()
+          ? item.pincode.toString().replace(/\.0$/, '').trim()
+          : null;
+      const cleanState =
+        item.state && item.state.toString().trim() ? item.state.toString().trim() : 'Gujarat';
+      let cleanStateCode =
+        item.stateCode && item.stateCode.toString().trim()
+          ? item.stateCode.toString().replace(/\.0$/, '').trim()
+          : '24';
       if (cleanStateCode.length === 1) cleanStateCode = '0' + cleanStateCode;
 
       let cleanAddress = item.billingAddress || item.address || null;
@@ -373,29 +478,166 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
         cleanAddress = `${cleanAddress}, ${cleanPincode}`;
       }
 
-      const cleanType = item.customerType || (cleanGstin ? 'CORPORATE' : 'RETAIL');
       const openBal = parseFloat(item.openingBalance || 0) || 0;
+      const routing = getEntityRouting(item);
 
-      // 1. Strict In-Batch Deduplication: prevent duplicate rows inside the same Excel file
+      // ==========================================
+      // ROUTING 1: GENERAL LEDGER ACCOUNTING ACCOUNTS
+      // (Capital, Loans, Bank, Cash, Expenses, etc. - NEVER add to retail billing)
+      // ==========================================
+      if (routing.target === 'ACCOUNTING_LEDGER') {
+        categorizedLedgers++;
+        breakdown.generalLedgers++;
+
+        // If this ledger account was previously accidentally saved in Customer directory, clean it up!
+        if (cleanupMisrouted) {
+          const misroutedCust = existingByName.get(nameKey);
+          if (misroutedCust) {
+            try {
+              const relCount = await prisma.customer.findUnique({
+                where: { id: misroutedCust.id },
+                select: {
+                  _count: { select: { invoices: true, estimates: true, payments: true } },
+                },
+              });
+              if (
+                relCount &&
+                relCount._count.invoices === 0 &&
+                relCount._count.estimates === 0 &&
+                relCount._count.payments === 0
+              ) {
+                await prisma.customer.delete({ where: { id: misroutedCust.id } });
+                existingByName.delete(nameKey);
+                cleanedMisrouted++;
+              }
+            } catch (ignoreErr) {
+              // Ignore deletion error if constrained
+            }
+          }
+        }
+        continue;
+      }
+
+      // ==========================================
+      // ROUTING 2: SUPPLIERS & VENDORS
+      // (Sundry Creditors / Suppliers -> prisma.supplier)
+      // ==========================================
+      if (routing.target === 'SUPPLIER') {
+        const supBatchKey = `sup:${nameKey}`;
+        if (seenInCurrentBatch.has(supBatchKey)) {
+          skippedSuppliers++;
+          continue;
+        }
+        seenInCurrentBatch.add(supBatchKey);
+
+        const existingSup =
+          existingSuppliersByName.get(nameKey) ||
+          (cleanMobile !== '-' ? existingSuppliersByMobile.get(cleanMobile) : null) ||
+          (cleanGstin ? existingSuppliersByGst.get(cleanGstin) : null);
+
+        if (existingSup) {
+          if (overwriteExisting) {
+            await prisma.supplier.update({
+              where: { id: existingSup.id },
+              data: {
+                address: cleanAddress || existingSup.address,
+                state: cleanState || existingSup.state,
+                stateCode: cleanStateCode || existingSup.stateCode,
+                gstin: cleanGstin || existingSup.gstin,
+                mobile: cleanMobile !== '-' ? cleanMobile : existingSup.mobile,
+              },
+            });
+            updatedSuppliers++;
+          } else {
+            skippedSuppliers++;
+          }
+        } else {
+          const newSup = await prisma.supplier.create({
+            data: {
+              name: cleanName,
+              contactPerson: item.contactPerson ? item.contactPerson.toString().trim() : null,
+              mobile: cleanMobile,
+              email: item.email ? item.email.toString().trim() : null,
+              gstin: cleanGstin,
+              address: cleanAddress,
+              state: cleanState,
+              stateCode: cleanStateCode,
+              openingBalance: openBal,
+              currentBalance: openBal,
+              zohoSyncStatus: 'PENDING',
+            },
+          });
+
+          existingSuppliersByName.set(nameKey, newSup);
+          if (cleanMobile !== '-') existingSuppliersByMobile.set(cleanMobile, newSup);
+          if (cleanGstin) existingSuppliersByGst.set(cleanGstin, newSup);
+          importedSuppliers++;
+        }
+
+        breakdown.suppliers++;
+
+        // If this supplier was previously accidentally saved in Customer directory, clean it up!
+        if (cleanupMisrouted) {
+          const misroutedCust = existingByName.get(nameKey);
+          if (misroutedCust) {
+            try {
+              const relCount = await prisma.customer.findUnique({
+                where: { id: misroutedCust.id },
+                select: {
+                  _count: { select: { invoices: true, estimates: true, payments: true } },
+                },
+              });
+              if (
+                relCount &&
+                relCount._count.invoices === 0 &&
+                relCount._count.estimates === 0 &&
+                relCount._count.payments === 0
+              ) {
+                await prisma.customer.delete({ where: { id: misroutedCust.id } });
+                existingByName.delete(nameKey);
+                cleanedMisrouted++;
+              }
+            } catch (ignoreErr) {
+              // Ignore deletion error if constrained
+            }
+          }
+        }
+        continue;
+      }
+
+      // ==========================================
+      // ROUTING 3: CUSTOMERS
+      // (Sundry Debtors -> prisma.customer with Tiered Pricebook)
+      // ==========================================
+      const cleanType = routing.customerType || 'RETAIL';
+      const custBatchKey = `cust:${nameKey}`;
+
       if (
-        seenInCurrentBatch.has(nameKey) ||
+        seenInCurrentBatch.has(custBatchKey) ||
         (cleanMobile !== '-' && seenInCurrentBatch.has(`m:${cleanMobile}`)) ||
         (cleanGstin && seenInCurrentBatch.has(`g:${cleanGstin}`))
       ) {
-        skipped++;
+        skippedCustomers++;
         continue;
       }
-      seenInCurrentBatch.add(nameKey);
+      seenInCurrentBatch.add(custBatchKey);
       if (cleanMobile !== '-') seenInCurrentBatch.add(`m:${cleanMobile}`);
       if (cleanGstin) seenInCurrentBatch.add(`g:${cleanGstin}`);
 
+      // Map appropriate Pricebook based on customer tier
       let assignedPbId = item.pricebookId;
       if (!assignedPbId) {
-        if (cleanType === 'INTERIOR_DESIGNER' && designerPb) assignedPbId = designerPb.id;
+        if (cleanType === 'WHOLESALE' && wholesalePb) assignedPbId = wholesalePb.id;
+        else if (cleanType === 'INTERIOR_DESIGNER' && designerPb) assignedPbId = designerPb.id;
         else if (defaultPb) assignedPbId = defaultPb.id;
       }
 
-      // 2. Strict Database Deduplication: Match existing by Name, Mobile, GSTIN, or PAN
+      if (cleanType === 'WHOLESALE') breakdown.wholesalers++;
+      else if (cleanType === 'INTERIOR_DESIGNER') breakdown.architects++;
+      else if (cleanType === 'CORPORATE') breakdown.corporate++;
+      else breakdown.retailers++;
+
+      // Database Deduplication: Match existing by Name, Mobile, GSTIN, or PAN
       const existing =
         existingByName.get(nameKey) ||
         (cleanMobile !== '-' ? existingByMobile.get(cleanMobile) : null) ||
@@ -403,7 +645,8 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
         (cleanPan ? existingByPan.get(cleanPan) : null);
 
       if (existing) {
-        if (overwriteExisting) {
+        // If overwrite is enabled, or if updating a generic customer to a specific WHOLESALE/DESIGNER tier
+        if (overwriteExisting || (cleanType !== 'RETAIL' && existing.customerType === 'RETAIL')) {
           await prisma.customer.update({
             where: { id: existing.id },
             data: {
@@ -419,10 +662,9 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
               pricebookId: assignedPbId || existing.pricebookId,
             },
           });
-          updated++;
+          updatedCustomers++;
         } else {
-          // Strictly skip: No duplicate row will be added
-          skipped++;
+          skippedCustomers++;
         }
       } else {
         const newCust = await prisma.customer.create({
@@ -446,27 +688,34 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
           },
         });
 
-        // Register new customer in in-memory maps to prevent duplicates within this batch
         existingByName.set(nameKey, newCust);
         if (cleanMobile !== '-') existingByMobile.set(cleanMobile, newCust);
         if (cleanGstin) existingByGst.set(cleanGstin, newCust);
         if (cleanPan) existingByPan.set(cleanPan, newCust);
 
-        imported++;
+        importedCustomers++;
       }
     }
 
+    const message = `Smart Account Routing Complete: ${importedCustomers + updatedCustomers} Customers organized (${breakdown.retailers} Retail, ${breakdown.wholesalers} Wholesale, ${breakdown.architects} Architects), ${importedSuppliers + updatedSuppliers} Suppliers in Supplier Directory, ${categorizedLedgers} General Ledgers safely excluded.${cleanedMisrouted > 0 ? ` (${cleanedMisrouted} previously misrouted entries cleaned)` : ''}`;
+
     res.json({
       success: true,
-      message: `Import complete: ${imported} imported, ${updated} updated, ${skipped} duplicates prevented.`,
-      imported,
-      updated,
-      skipped,
+      message,
+      importedCustomers,
+      updatedCustomers,
+      skippedCustomers,
+      importedSuppliers,
+      updatedSuppliers,
+      skippedSuppliers,
+      categorizedLedgers,
+      cleanedMisrouted,
+      breakdown,
       total: items.length,
     });
   } catch (err) {
     console.error('Customer bulk-import error:', err);
-    res.status(500).json({ error: 'Failed to bulk-import customers: ' + err.message });
+    res.status(500).json({ error: 'Failed to bulk-import accounts: ' + err.message });
   }
 });
 

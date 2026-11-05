@@ -766,7 +766,7 @@ export default function POSPage() {
                 </p>
                 {customer.customerType && customer.customerType !== 'RETAIL' && (
                   <span className="text-[9px] font-bold px-1.5 py-0.2 rounded uppercase bg-amber-950 text-amber-400 border border-amber-800 shrink-0">
-                    {customer.customerType === 'INTERIOR_DESIGNER' ? 'Designer' : 'Corp'}
+                    {customer.customerType === 'WHOLESALE' ? 'Wholesale' : customer.customerType === 'INTERIOR_DESIGNER' ? 'Designer' : 'Corp'}
                   </span>
                 )}
               </div>
@@ -1150,7 +1150,7 @@ export default function POSPage() {
                                 </span>
                                 {c.customerType && c.customerType !== 'RETAIL' && (
                                   <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase bg-amber-950 text-amber-400 border border-amber-800 shrink-0">
-                                    {c.customerType === 'INTERIOR_DESIGNER' ? 'Designer' : 'Corp'}
+                                    {c.customerType === 'WHOLESALE' ? 'Wholesale' : c.customerType === 'INTERIOR_DESIGNER' ? 'Designer' : 'Corp'}
                                   </span>
                                 )}
                                 <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold bg-stone-900 border border-stone-700 text-stone-300 shrink-0">

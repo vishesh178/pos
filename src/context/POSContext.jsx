@@ -74,6 +74,13 @@ export function POSProvider({ children }) {
             return;
           }
         }
+        if (newCust.customerType === 'WHOLESALE') {
+          const wholesalePb = pricebooks.find((p) => p.code === 'WHOLESALE');
+          if (wholesalePb) {
+            selectPricebook(wholesalePb);
+            return;
+          }
+        }
         if (newCust.customerType === 'INTERIOR_DESIGNER') {
           const designerPb = pricebooks.find((p) => p.code === 'DESIGNER');
           if (designerPb) {

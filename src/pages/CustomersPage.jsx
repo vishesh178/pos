@@ -380,6 +380,7 @@ export default function CustomersPage() {
           >
             <option value="all">All Customer Types</option>
             <option value="RETAIL">Retail Customers</option>
+            <option value="WHOLESALE">Wholesale & Trade Partners</option>
             <option value="INTERIOR_DESIGNER">Interior Designers & Architects</option>
             <option value="CORPORATE">Corporate & Hospitality</option>
           </select>
@@ -445,10 +446,12 @@ export default function CustomersPage() {
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       <span
                         className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
-                          c.customerType === 'INTERIOR_DESIGNER'
+                          c.customerType === 'WHOLESALE'
+                            ? 'bg-purple-950 text-purple-400 border border-purple-800'
+                            : c.customerType === 'INTERIOR_DESIGNER'
                             ? 'bg-amber-950 text-amber-400 border border-amber-800'
                             : c.customerType === 'CORPORATE'
-                            ? 'bg-purple-950 text-purple-400 border border-purple-800'
+                            ? 'bg-blue-950 text-blue-400 border border-blue-800'
                             : 'bg-stone-800 text-stone-300'
                         }`}
                       >
@@ -675,7 +678,13 @@ export default function CustomersPage() {
                       ) : (
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-stone-950 border border-stone-800 text-stone-400">
-                            {c.customerType === 'INTERIOR_DESIGNER' ? 'Designer' : 'Retail'}
+                            {c.customerType === 'WHOLESALE'
+                              ? 'Wholesale'
+                              : c.customerType === 'INTERIOR_DESIGNER'
+                              ? 'Designer'
+                              : c.customerType === 'CORPORATE'
+                              ? 'Corporate'
+                              : 'Retail'}
                           </span>
                           {c.panNo && (
                             <span className="px-1.5 py-0.5 rounded font-mono text-[10px] bg-stone-950 border border-stone-800 text-amber-400 font-medium">
@@ -1102,7 +1111,10 @@ export default function CustomersPage() {
                     onChange={(e) => {
                       const t = e.target.value;
                       const next = { ...formData, customerType: t };
-                      if (t === 'INTERIOR_DESIGNER') {
+                      if (t === 'WHOLESALE') {
+                        const pb = pricebooks.find((p) => p.code === 'WHOLESALE');
+                        if (pb) next.pricebookId = pb.id;
+                      } else if (t === 'INTERIOR_DESIGNER') {
                         const pb = pricebooks.find((p) => p.code === 'DESIGNER');
                         if (pb) next.pricebookId = pb.id;
                       }
@@ -1111,7 +1123,8 @@ export default function CustomersPage() {
                     className="w-full px-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-xs focus:border-amber-500 focus:outline-none"
                   >
                     <option value="RETAIL">Retail Showroom Customer</option>
-                    <option value="INTERIOR_DESIGNER">Interior Designer / Architect</option>
+                    <option value="WHOLESALE">Wholesale & Trade Partner (35% Off)</option>
+                    <option value="INTERIOR_DESIGNER">Interior Designer / Architect (20% Off)</option>
                     <option value="CORPORATE">Corporate / Hotel Decor</option>
                   </select>
                 </div>

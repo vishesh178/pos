@@ -12,6 +12,9 @@ import {
   Search,
   Download,
   ShieldCheck,
+  Users,
+  Truck,
+  BookOpen,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../../context/AuthContext';
@@ -25,29 +28,47 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
   const [parsedRows, setParsedRows] = useState([]);
   const [inSheetDuplicates, setInSheetDuplicates] = useState(0);
   const [previewSearch, setPreviewSearch] = useState('');
+  const [filterType, setFilterType] = useState('all'); // 'all' | 'customers' | 'suppliers' | 'ledgers'
+  const [cleanupMisrouted, setCleanupMisrouted] = useState(true); // Default true: reorganize misrouted accounts
   const [overwriteExisting, setOverwriteExisting] = useState(false); // Default false: strictly no duplicates
   const [loading, setLoading] = useState(false);
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
 
-  if (!isOpen) return null;
-
-  // Accounting section titles to ignore
-  const SECTION_KEYWORDS = [
+  // Accounting section titles and groups
+  const SECTION_HEADERS = [
     'capital',
     'reserve and surplus',
     'loans funds',
     'secured loans',
     'unsecured loans',
     'sundry creditors',
-    'sundry debtors',
+    'sundry creditors / suppliers',
+    'other liabilities',
     'current liabilities',
     'current assets',
     'fixed assets',
     'investments',
-    'profit and loss',
-    'profit and loss account',
+    'inventories',
+    'sundry debtors',
+    'sundry debtors / retailer',
+    'sundry debtors / wholesaler',
+    'sundry debtors / architech',
+    'sundry debtors / architect',
+    'cash on hand',
+    'cash at bank',
+    'loans and advances',
+    'other current assets',
+    'opening stock',
+    'purchase stock',
+    'trading expenses',
+    'profit and loss expenses',
+    'sales',
+    'closing stock',
+    'trading incomes',
+    'profit and loss incomes',
+    'salary',
     'total',
     'account list',
     'accounting year',
@@ -56,6 +77,63 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
     'closing balance',
     'opening balance',
   ];
+
+  // Helper: Classify entity destination based on current section heading & GST
+  const classifySection = (secName, gstin) => {
+    const s = String(secName || '').toLowerCase().trim();
+    if (s.includes('sundry creditor') || s.includes('supplier') || s.includes('vendor')) {
+      return {
+        targetEntity: 'SUPPLIER',
+        customerType: null,
+        label: 'Supplier / Vendor',
+        badgeColor: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
+        dest: 'Suppliers Directory',
+        isLedger: false,
+      };
+    }
+    if (s.includes('sundry debtor') || s.includes('debtor')) {
+      if (s.includes('wholesal')) {
+        return {
+          targetEntity: 'CUSTOMER',
+          customerType: 'WHOLESALE',
+          label: 'Wholesale Partner',
+          badgeColor: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
+          dest: 'Customer Directory (Wholesale Tier)',
+          isLedger: false,
+        };
+      }
+      if (s.includes('architech') || s.includes('architect') || s.includes('designer')) {
+        return {
+          targetEntity: 'CUSTOMER',
+          customerType: 'INTERIOR_DESIGNER',
+          label: 'Architect / Designer',
+          badgeColor: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+          dest: 'Customer Directory (Designer Tier)',
+          isLedger: false,
+        };
+      }
+      return {
+        targetEntity: 'CUSTOMER',
+        customerType: gstin && gstin.length >= 10 ? 'CORPORATE' : 'RETAIL',
+        label: gstin && gstin.length >= 10 ? 'Corporate Buyer' : 'Retail Customer',
+        badgeColor: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+        dest: 'Customer Directory (Retail)',
+        isLedger: false,
+      };
+    }
+
+    // Any other section (Capital, Loans, Bank, Cash, Expenses, Liabilities, Assets, etc.)
+    return {
+      targetEntity: 'ACCOUNTING_LEDGER',
+      customerType: null,
+      label: 'General Ledger Account',
+      badgeColor: 'bg-stone-800 text-stone-400 border-stone-700',
+      dest: 'Excluded from Retail Billing',
+      isLedger: true,
+    };
+  };
+
+  if (!isOpen) return null;
 
   // Download exact matching sample Excel template (.xlsx) with all 10 customer fields
   const handleDownloadSample = () => {
@@ -120,7 +198,7 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
     }
   };
 
-  // Core parser for 2D array of rows from Excel or TSV with strict deduplication
+  // Core parser for 2D array of rows from Excel or TSV with Section Routing
   const processRawRows = (rows, sourceName = '') => {
     try {
       if (!rows || rows.length === 0) {
@@ -203,7 +281,8 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
       }
 
       const startIndex = headerIndex !== -1 ? headerIndex + 1 : 0;
-      const customers = [];
+      const accounts = [];
+      let currentSection = 'General Ledger';
 
       // Track duplicate rows inside the sheet to never add duplicates
       const seenNames = new Set();
@@ -223,21 +302,22 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
         // Skip blank or single-character noise
         if (!firstCol || firstCol.length < 2) continue;
 
-        // Skip known accounting group headings
-        if (
-          SECTION_KEYWORDS.some(
-            (k) =>
-              firstColLower === k ||
-              firstColLower.startsWith(k + ' /') ||
-              firstColLower.startsWith(k + ':') ||
-              firstColLower.startsWith(k + ' -')
-          )
-        ) {
-          continue;
+        // Detect section headers (e.g. 'Sundry Creditors / Suppliers', 'Capital', 'Loans Funds', etc.)
+        const trailingValues = cols.slice(1).filter((c) => c && c.trim() !== '');
+        const isHeaderKeyword = SECTION_HEADERS.some(
+          (k) =>
+            firstColLower === k ||
+            firstColLower.startsWith(k + ' /') ||
+            firstColLower.startsWith(k + ':') ||
+            firstColLower.startsWith(k + ' -')
+        );
+
+        if (isHeaderKeyword && trailingValues.length === 0) {
+          currentSection = firstCol;
+          continue; // Move to rows within this section
         }
 
         // Map fields based on detected headers or default 10-column layout:
-        // [0: Account Name, 1: Address, 2: Mobile Nos., 3: State, 4: State Code, 5: Pincode, 6: GST No., 7: GST Date, 8: PAN No., 9: MSME No.]
         let name = firstCol;
         let address = addressCol !== -1 ? (cols[addressCol] || '') : (cols[1] || '');
         let mobile = mobileCol !== -1 ? (cols[mobileCol] || '') : (cols[2] || '');
@@ -264,7 +344,13 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
         }
 
         // Clean mobile
-        if (!mobile || mobile === '0' || mobile === '0.0' || mobile.toLowerCase() === 'nan' || mobile === '-') {
+        if (
+          !mobile ||
+          mobile === '0' ||
+          mobile === '0.0' ||
+          mobile.toLowerCase() === 'nan' ||
+          mobile === '-'
+        ) {
           mobile = '-';
         }
 
@@ -287,8 +373,11 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
           else state = 'Gujarat';
         }
 
+        // Classify entity destination based on current section heading & GST
+        const classification = classifySection(currentSection, gstin);
+
         // In-file duplicate detection: strictly avoid duplicate accounts in the list
-        const nameKey = name.toLowerCase();
+        const nameKey = `${classification.targetEntity}:${name.toLowerCase()}`;
         if (seenNames.has(nameKey)) {
           duplicatesFiltered++;
           continue;
@@ -306,7 +395,7 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
         if (mobile !== '-') seenMobiles.add(mobile);
         if (gstin) seenGstins.add(gstin);
 
-        customers.push({
+        accounts.push({
           name,
           address,
           mobile,
@@ -317,18 +406,24 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
           gstDate,
           panNo,
           msmeNo,
-          customerType: gstin && gstin.length >= 10 ? 'CORPORATE' : 'RETAIL',
+          section: currentSection,
+          targetEntity: classification.targetEntity,
+          customerType: classification.customerType,
+          label: classification.label,
+          badgeColor: classification.badgeColor,
+          dest: classification.dest,
+          isLedger: classification.isLedger,
         });
       }
 
-      if (customers.length === 0) {
-        setError('No valid customer rows could be detected in this sheet. Please check the column headings.');
+      if (accounts.length === 0) {
+        setError('No valid account rows could be detected in this sheet. Please check the column headings.');
         setParsedRows([]);
         setInSheetDuplicates(0);
         return;
       }
 
-      setParsedRows(customers);
+      setParsedRows(accounts);
       setInSheetDuplicates(duplicatesFiltered);
       setError('');
       setResult(null);
@@ -379,41 +474,31 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
       }
     };
 
-    reader.onerror = () => {
-      setError('Failed to read file from disk');
-    };
-
     reader.readAsArrayBuffer(file);
   };
 
-  // Handle direct text paste from Excel / Google Sheets
+  // Handle direct tab-separated paste from clipboard
   const handlePasteChange = (e) => {
     const text = e.target.value;
     setInputText(text);
 
     if (!text.trim()) {
       setParsedRows([]);
-      setInSheetDuplicates(0);
       return;
     }
 
-    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    const isTab = text.includes('\t');
-
-    const rows = lines.map((line) => {
-      if (isTab) {
-        return line.split('\t').map((c) => c.trim().replace(/^["']|["']$/g, ''));
-      }
-      const match = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(',');
-      return match.map((v) => v.trim().replace(/^["']|["']$/g, ''));
-    });
+    const lines = text
+      .trim()
+      .split(/\r?\n/)
+      .filter((l) => l.trim().length > 0);
+    const rows = lines.map((l) => l.split('\t'));
 
     setFileName('Pasted from Excel');
     setSheetName('Clipboard');
     processRawRows(rows, 'Pasted Data');
   };
 
-  // Submit parsed customers with automatic dual-engine (bulk + parallel batch fallback)
+  // Submit parsed accounts with Smart Section Routing
   const handleImportSubmit = async () => {
     if (parsedRows.length === 0) return;
     setLoading(true);
@@ -422,89 +507,31 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
     setImportProgress({ current: 0, total: parsedRows.length });
 
     try {
-      // Step 1: Try high-speed bulk-import endpoint
-      try {
-        const bulkRes = await fetch('/api/customers/bulk-import', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            items: parsedRows,
-            overwriteExisting,
-          }),
-        });
-
-        const contentType = bulkRes.headers.get('content-type') || '';
-        if (bulkRes.ok && contentType.includes('application/json')) {
-          const data = await bulkRes.json();
-          setResult(data);
-          if (onImported) onImported();
-          return;
-        } else if (!bulkRes.ok && contentType.includes('application/json')) {
-          const errData = await bulkRes.json();
-          throw new Error(errData.error || 'Bulk import failed');
-        }
-      } catch (bulkErr) {
-        if (bulkErr.message && !bulkErr.message.includes('Unexpected token')) {
-          console.warn('Bulk endpoint error:', bulkErr.message);
-        }
-      }
-
-      // Step 2: Instant parallel chunked fallback via standard customer endpoint
-      // Guarantees 100% success without needing any server restart
-      let imported = 0;
-      let skipped = 0;
-      const batchSize = 15;
-
-      for (let i = 0; i < parsedRows.length; i += batchSize) {
-        const batch = parsedRows.slice(i, i + batchSize);
-        await Promise.all(
-          batch.map(async (item) => {
-            try {
-              const res = await fetch('/api/customers', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({
-                  name: item.name,
-                  mobile: item.mobile || '-',
-                  billingAddress: item.address || null,
-                  pincode: item.pincode || null,
-                  gstin: item.gstin || null,
-                  gstDate: item.gstDate || null,
-                  panNo: item.panNo || null,
-                  msmeNo: item.msmeNo || null,
-                  state: item.state || 'Gujarat',
-                  stateCode: item.stateCode || '24',
-                  customerType: item.customerType || 'RETAIL',
-                }),
-              });
-
-              if (res.ok) {
-                imported++;
-              } else {
-                skipped++;
-              }
-            } catch {
-              skipped++;
-            }
-          })
-        );
-        setImportProgress({ current: Math.min(i + batchSize, parsedRows.length), total: parsedRows.length });
-      }
-
-      setResult({
-        success: true,
-        message: `Import complete: ${imported} accounts added successfully${skipped > 0 ? ` (${skipped} existing/duplicates skipped)` : ''}.`,
-        imported,
-        skipped,
+      const bulkRes = await fetch('/api/customers/bulk-import', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          items: parsedRows,
+          overwriteExisting,
+          cleanupMisrouted,
+        }),
       });
 
-      if (onImported) onImported();
+      const contentType = bulkRes.headers.get('content-type') || '';
+      if (bulkRes.ok && contentType.includes('application/json')) {
+        const data = await bulkRes.json();
+        setResult(data);
+        if (onImported) onImported();
+        return;
+      } else if (!bulkRes.ok && contentType.includes('application/json')) {
+        const errData = await bulkRes.json();
+        throw new Error(errData.error || 'Bulk import failed');
+      } else {
+        throw new Error(`Server returned error status ${bulkRes.status}`);
+      }
     } catch (err) {
       console.error('Import error:', err);
       setError(err.message || 'An error occurred during import.');
@@ -514,12 +541,27 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
     }
   };
 
-  // Filter preview list
+  // Breakdown statistics for quick filter pill counters
+  const customersCount = parsedRows.filter((r) => r.targetEntity === 'CUSTOMER').length;
+  const suppliersCount = parsedRows.filter((r) => r.targetEntity === 'SUPPLIER').length;
+  const ledgersCount = parsedRows.filter((r) => r.targetEntity === 'ACCOUNTING_LEDGER').length;
+  const wholesaleCount = parsedRows.filter((r) => r.customerType === 'WHOLESALE').length;
+  const architectCount = parsedRows.filter((r) => r.customerType === 'INTERIOR_DESIGNER').length;
+  const retailCount = parsedRows.filter(
+    (r) => r.customerType === 'RETAIL' || r.customerType === 'CORPORATE'
+  ).length;
+
+  // Filter preview list by active sub-tab and search term
   const filteredPreview = parsedRows.filter((r) => {
+    if (filterType === 'customers' && r.targetEntity !== 'CUSTOMER') return false;
+    if (filterType === 'suppliers' && r.targetEntity !== 'SUPPLIER') return false;
+    if (filterType === 'ledgers' && r.targetEntity !== 'ACCOUNTING_LEDGER') return false;
+
     if (!previewSearch) return true;
     const q = previewSearch.toLowerCase();
     return (
       r.name.toLowerCase().includes(q) ||
+      (r.section && r.section.toLowerCase().includes(q)) ||
       (r.address && r.address.toLowerCase().includes(q)) ||
       (r.mobile && r.mobile.includes(q)) ||
       (r.gstin && r.gstin.toLowerCase().includes(q)) ||
@@ -530,22 +572,22 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-4xl shadow-2xl p-5 sm:p-6 space-y-4 my-auto">
+      <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-5xl shadow-2xl p-5 sm:p-6 space-y-4 my-auto">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-stone-800">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-serif font-bold text-base text-stone-100 flex items-center gap-2">
-                <span>Customer Excel Import</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-950/80 border border-emerald-700 text-emerald-300 font-semibold">
-                  10 Columns Ready
+                <span>Smart Master Account Importer & Router</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-950/80 border border-amber-700 text-amber-300 font-semibold">
+                  Section-Aware Routing
                 </span>
               </h3>
               <p className="text-[11px] text-stone-400">
-                Supports Account Name, Address, Mobile Nos, State, Code, Pincode, GST No, GST Date, PAN No, MSME No
+                Automatically routes Gokul Traders ledger sections: Creditors &rarr; Suppliers, Debtors &rarr; Customers (Retail, Wholesale, Architect), and safely excludes general ledger accounts.
               </p>
             </div>
           </div>
@@ -569,7 +611,7 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Upload Customer Excel (.xlsx)</span>
+            <span>Upload Account Master Excel (.xlsx)</span>
           </button>
 
           <button
@@ -594,10 +636,10 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
                 <FileSpreadsheet className="w-6 h-6 text-amber-500" />
               </div>
               <p className="font-semibold text-sm text-stone-200">
-                Click to select your Customer Excel <span className="text-amber-400 font-mono">.xlsx</span> file
+                Click to select your Account Master <span className="text-amber-400 font-mono">.xlsx</span> file
               </p>
               <p className="text-[11px] text-stone-500 mt-1 max-w-lg">
-                Automatically maps all 10 columns: Account Name, Address, Mobile, State & Code, Pincode, GST No, GST Date, PAN No, MSME No. Strictly prevents duplicate accounts.
+                Upload your Gokul Traders account list. The parser dynamically reads section headers (Sundry Creditors, Retailers, Wholesalers, Architects, Loans) and routes each entity to its proper directory.
               </p>
               <input
                 type="file"
@@ -635,7 +677,7 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
             <div className="flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs">
               <div className="flex items-center gap-2 text-stone-300">
                 <FileSpreadsheet className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>Need the exact 10-column Excel format? Download our pre-formatted template.</span>
+                <span>Need a standardized 10-column Excel format? Download our sample template.</span>
               </div>
               <button
                 type="button"
@@ -671,7 +713,7 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
             <div className="flex items-center justify-between text-xs">
               <span className="text-stone-300 font-semibold flex items-center gap-1.5">
                 <RefreshCw className="w-3.5 h-3.5 text-amber-500 animate-spin" />
-                <span>Importing customer accounts...</span>
+                <span>Routing and saving accounts...</span>
               </span>
               <span className="font-mono text-amber-400 font-bold">
                 {importProgress.current} / {importProgress.total}
@@ -680,7 +722,9 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
             <div className="w-full bg-stone-800 rounded-full h-2 overflow-hidden">
               <div
                 className="bg-amber-500 h-2 rounded-full transition-all duration-150"
-                style={{ width: `${Math.round((importProgress.current / importProgress.total) * 100)}%` }}
+                style={{
+                  width: `${Math.round((importProgress.current / importProgress.total) * 100)}%`,
+                }}
               />
             </div>
           </div>
@@ -694,111 +738,223 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
           </div>
         )}
 
-        {/* Success Alert */}
+        {/* Success Alert with Detailed Breakdown */}
         {result && (
-          <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-800 text-emerald-300 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-              <span>{result.message}</span>
+          <div className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-200 text-xs space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold text-sm text-emerald-300">
+                    Master Account Routing Successful!
+                  </h4>
+                  <p className="text-xs text-stone-300 mt-0.5">{result.message}</p>
+                </div>
+              </div>
+              <button
+                onClick={onClose}
+                className="px-4 py-1.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer transition-colors shrink-0"
+              >
+                Done
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="px-3.5 py-1.5 bg-emerald-900/80 hover:bg-emerald-800 text-emerald-100 rounded-lg text-xs font-bold cursor-pointer transition-colors"
-            >
-              Done
-            </button>
+
+            {/* Quick Metrics Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-emerald-800/60 font-mono text-center">
+              <div className="p-2 bg-stone-900/80 rounded-lg border border-stone-800">
+                <span className="block text-[10px] text-stone-400 font-sans">Customers</span>
+                <span className="text-emerald-400 font-bold text-sm">
+                  {result.importedCustomers + (result.updatedCustomers || 0)}
+                </span>
+                <span className="block text-[9px] text-stone-500 font-sans mt-0.5">
+                  Ret: {result.breakdown?.retailers || 0} • Whol: {result.breakdown?.wholesalers || 0} • Arch: {result.breakdown?.architects || 0}
+                </span>
+              </div>
+              <div className="p-2 bg-stone-900/80 rounded-lg border border-stone-800">
+                <span className="block text-[10px] text-stone-400 font-sans">Suppliers</span>
+                <span className="text-blue-400 font-bold text-sm">
+                  {result.importedSuppliers + (result.updatedSuppliers || 0)}
+                </span>
+                <span className="block text-[9px] text-stone-500 font-sans mt-0.5">
+                  Added to Suppliers Tab
+                </span>
+              </div>
+              <div className="p-2 bg-stone-900/80 rounded-lg border border-stone-800">
+                <span className="block text-[10px] text-stone-400 font-sans">Ledgers Excluded</span>
+                <span className="text-stone-400 font-bold text-sm">
+                  {result.categorizedLedgers || 0}
+                </span>
+                <span className="block text-[9px] text-stone-500 font-sans mt-0.5">
+                  Capital, Bank, Loans
+                </span>
+              </div>
+              <div className="p-2 bg-stone-900/80 rounded-lg border border-stone-800">
+                <span className="block text-[10px] text-stone-400 font-sans">Reorganized</span>
+                <span className="text-amber-400 font-bold text-sm">
+                  {result.cleanedMisrouted || 0}
+                </span>
+                <span className="block text-[9px] text-stone-500 font-sans mt-0.5">
+                  Cleaned from Customer list
+                </span>
+              </div>
+            </div>
           </div>
         )}
 
         {/* Parsed Accounts Table & Import Execution */}
         {parsedRows.length > 0 && (
           <div className="space-y-3 pt-2 border-t border-stone-800">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold font-mono">
-                  {parsedRows.length} Unique Accounts
-                </span>
-                {inSheetDuplicates > 0 && (
-                  <span className="flex items-center gap-1 text-[11px] text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
-                    <ShieldCheck className="w-3 h-3 text-amber-400" />
-                    <span>{inSheetDuplicates} duplicates merged</span>
+            {/* Filter Pills / Tabs */}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setFilterType('all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    filterType === 'all'
+                      ? 'bg-amber-500 text-stone-950 font-bold shadow'
+                      : 'bg-stone-950 border border-stone-800 text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  All Accounts ({parsedRows.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFilterType('customers')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    filterType === 'customers'
+                      ? 'bg-emerald-500 text-stone-950 font-bold shadow'
+                      : 'bg-stone-950 border border-stone-800 text-emerald-400 hover:border-emerald-700'
+                  }`}
+                >
+                  Customers ({customersCount})
+                  <span className="ml-1 text-[10px] opacity-80">
+                    ({retailCount} Ret, {wholesaleCount} Whol, {architectCount} Arch)
                   </span>
-                )}
-                <span className="text-stone-400 text-[11px]">ready to import</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFilterType('suppliers')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    filterType === 'suppliers'
+                      ? 'bg-blue-500 text-stone-950 font-bold shadow'
+                      : 'bg-stone-950 border border-stone-800 text-blue-400 hover:border-blue-700'
+                  }`}
+                >
+                  Suppliers ({suppliersCount})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFilterType('ledgers')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    filterType === 'ledgers'
+                      ? 'bg-stone-700 text-stone-100 font-bold shadow'
+                      : 'bg-stone-950 border border-stone-800 text-stone-500 hover:text-stone-300'
+                  }`}
+                >
+                  General Ledgers ({ledgersCount} Excluded)
+                </button>
               </div>
 
-              <div className="flex items-center gap-3">
-                {/* Search Filter in Preview */}
+              <div className="flex items-center gap-2">
                 <div className="relative">
                   <Search className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-2" />
                   <input
                     type="text"
                     value={previewSearch}
                     onChange={(e) => setPreviewSearch(e.target.value)}
-                    placeholder="Search accounts..."
+                    placeholder="Search accounts or sections..."
                     className="pl-8 pr-2.5 py-1 bg-stone-950 border border-stone-800 rounded-lg text-[11px] text-stone-200 placeholder:text-stone-600 focus:outline-none focus:border-amber-500"
                   />
                 </div>
-
-                {/* Overwrite Checkbox */}
-                <label className="flex items-center gap-1.5 text-stone-300 text-[11px] cursor-pointer shrink-0">
-                  <input
-                    type="checkbox"
-                    checked={overwriteExisting}
-                    onChange={(e) => setOverwriteExisting(e.target.checked)}
-                    className="rounded bg-stone-950 border-stone-700 text-amber-500 cursor-pointer"
-                  />
-                  <span>Update if exists (no duplicates)</span>
-                </label>
               </div>
             </div>
 
-            {/* Scrollable Preview Table with all 10 columns */}
+            {/* Reorganization & Overwrite options bar */}
+            <div className="p-2.5 rounded-xl bg-stone-950/80 border border-stone-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px]">
+              <label className="flex items-center gap-1.5 text-stone-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={cleanupMisrouted}
+                  onChange={(e) => setCleanupMisrouted(e.target.checked)}
+                  className="rounded bg-stone-900 border-stone-700 text-amber-500 cursor-pointer"
+                />
+                <span className="font-semibold text-amber-400">Reorganize misrouted accounts:</span>
+                <span className="text-stone-400">
+                  Moves suppliers & clears loan/capital ledgers previously imported into Customers
+                </span>
+              </label>
+
+              <label className="flex items-center gap-1.5 text-stone-300 cursor-pointer shrink-0">
+                <input
+                  type="checkbox"
+                  checked={overwriteExisting}
+                  onChange={(e) => setOverwriteExisting(e.target.checked)}
+                  className="rounded bg-stone-900 border-stone-700 text-amber-500 cursor-pointer"
+                />
+                <span>Update address/tier if exists</span>
+              </label>
+            </div>
+
+            {/* Scrollable Preview Table with Destination Column */}
             <div className="max-h-60 overflow-x-auto overflow-y-auto border border-stone-800 rounded-xl bg-stone-950 text-xs">
-              <table className="w-full text-left text-[11px] min-w-[700px]">
+              <table className="w-full text-left text-[11px] min-w-[800px]">
                 <thead className="bg-stone-900 text-stone-400 uppercase text-[9px] font-bold sticky top-0 border-b border-stone-800">
                   <tr>
                     <th className="p-2.5">Account Name</th>
+                    <th className="p-2.5">Target Destination</th>
                     <th className="p-2.5">Address</th>
                     <th className="p-2.5">Mobile</th>
                     <th className="p-2.5">State (Code)</th>
-                    <th className="p-2.5">Pincode</th>
                     <th className="p-2.5">GST No.</th>
                     <th className="p-2.5">PAN No.</th>
-                    <th className="p-2.5">MSME No.</th>
-                    <th className="p-2.5 text-right">Type</th>
+                    <th className="p-2.5">Section Source</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-800/60 text-stone-300">
-                  {filteredPreview.slice(0, 35).map((r, idx) => (
+                  {filteredPreview.slice(0, 40).map((r, idx) => (
                     <tr key={idx} className="hover:bg-stone-900/50 transition-colors">
-                      <td className="p-2.5 font-semibold text-stone-100 whitespace-nowrap">{r.name}</td>
-                      <td className="p-2.5 text-stone-400 truncate max-w-[150px]">{r.address || '-'}</td>
-                      <td className="p-2.5 font-mono text-stone-300 whitespace-nowrap">{r.mobile || '-'}</td>
+                      <td className="p-2.5 font-semibold text-stone-100 whitespace-nowrap">
+                        {r.name}
+                      </td>
+                      <td className="p-2.5 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${r.badgeColor}`}
+                        >
+                          {r.label}
+                        </span>
+                        <div className="text-[9px] text-stone-500 mt-0.5">{r.dest}</div>
+                      </td>
+                      <td className="p-2.5 text-stone-400 truncate max-w-[150px]">
+                        {r.address || '-'}
+                      </td>
+                      <td className="p-2.5 font-mono text-stone-300 whitespace-nowrap">
+                        {r.mobile || '-'}
+                      </td>
                       <td className="p-2.5 text-stone-300 whitespace-nowrap">
                         {r.state} <span className="text-stone-500 font-mono">({r.stateCode})</span>
                       </td>
-                      <td className="p-2.5 font-mono text-stone-400">{r.pincode || '-'}</td>
-                      <td className="p-2.5 font-mono text-stone-300 whitespace-nowrap">{r.gstin || '-'}</td>
-                      <td className="p-2.5 font-mono text-amber-400 whitespace-nowrap">{r.panNo || '-'}</td>
-                      <td className="p-2.5 font-mono text-stone-400 whitespace-nowrap">{r.msmeNo || '-'}</td>
-                      <td className="p-2.5 text-right whitespace-nowrap">
-                        <span
-                          className={`px-1.5 py-0.5 rounded text-[9px] font-bold font-mono ${
-                            r.customerType === 'CORPORATE'
-                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                              : 'bg-stone-800 text-stone-400'
-                          }`}
-                        >
-                          {r.customerType}
-                        </span>
+                      <td className="p-2.5 font-mono text-stone-300 whitespace-nowrap">
+                        {r.gstin || '-'}
+                      </td>
+                      <td className="p-2.5 font-mono text-amber-400 whitespace-nowrap">
+                        {r.panNo || '-'}
+                      </td>
+                      <td className="p-2.5 text-stone-500 text-[10px] truncate max-w-[120px]">
+                        {r.section}
                       </td>
                     </tr>
                   ))}
-                  {filteredPreview.length > 35 && (
+                  {filteredPreview.length > 40 && (
                     <tr>
-                      <td colSpan={9} className="p-2.5 text-center text-stone-500 text-[10px] italic">
-                        + {filteredPreview.length - 35} more accounts loaded in sheet...
+                      <td
+                        colSpan={8}
+                        className="p-2.5 text-center text-stone-500 text-[10px] italic"
+                      >
+                        + {filteredPreview.length - 40} more accounts loaded in this category...
                       </td>
                     </tr>
                   )}
@@ -810,7 +966,10 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
             <div className="pt-2 flex items-center justify-between border-t border-stone-800">
               <span className="text-[11px] text-stone-400 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Duplicate protection active: matching accounts by Name, Phone & GST</span>
+                <span>
+                  Section routing active: {customersCount} Customers & {suppliersCount} Suppliers
+                  will be imported
+                </span>
               </span>
               <div className="flex items-center gap-2">
                 <button
@@ -828,7 +987,9 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
                 >
                   <Database className="w-3.5 h-3.5" />
                   <span>
-                    {loading ? 'Importing Accounts...' : `Import ${parsedRows.length} Accounts`}
+                    {loading
+                      ? 'Routing & Ingesting...'
+                      : `Import ${customersCount} Customers & ${suppliersCount} Suppliers`}
                   </span>
                 </button>
               </div>
