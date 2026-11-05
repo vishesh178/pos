@@ -16,6 +16,8 @@ import {
   Filter,
   Search,
   RefreshCw,
+  Landmark,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ReceiptModal from '../components/pos/ReceiptModal';
@@ -70,6 +72,26 @@ export default function ReportsPage() {
   // Search filter for product profitability
   const [productSearch, setProductSearch] = useState('');
 
+  // General Accounts (Chart of Accounts Ledger)
+  const [generalAccounts, setGeneralAccounts] = useState([]);
+  const [genAccountSearch, setGenAccountSearch] = useState('');
+  const [genAccountGroupFilter, setGenAccountGroupFilter] = useState('ALL');
+  const [loadingGenAccounts, setLoadingGenAccounts] = useState(false);
+
+  const loadGeneralAccounts = async () => {
+    setLoadingGenAccounts(true);
+    try {
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/api/general-accounts', { headers: authHeaders });
+      const data = await res.json();
+      setGeneralAccounts(Array.isArray(data.accounts) ? data.accounts : []);
+    } catch (err) {
+      console.error('Failed to load general accounts:', err);
+    } finally {
+      setLoadingGenAccounts(false);
+    }
+  };
+
   // Reprint Receipt Modal State
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
@@ -103,6 +125,7 @@ export default function ReportsPage() {
       setProductMargins(Array.isArray(dataProd) ? dataProd : []);
       setCategorySales(dataCat);
       setOutstandings(dataOut);
+      loadGeneralAccounts();
     } catch (err) {
       console.error('Failed to load initial reports data:', err);
     } finally {
@@ -190,6 +213,7 @@ export default function ReportsPage() {
           onClick={() => {
             loadInitialData();
             loadSalesSummary();
+            loadGeneralAccounts();
           }}
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-stone-800 bg-stone-900 text-stone-300 hover:text-amber-400 hover:border-amber-500/40 text-xs transition-colors self-start md:self-auto"
         >
@@ -284,6 +308,18 @@ export default function ReportsPage() {
         >
           <Printer className="w-3.5 h-3.5" />
           <span>Invoices Register ({invoices.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('chart-of-accounts')}
+          className={`px-3.5 py-2 rounded-xl font-semibold flex items-center gap-1.5 whitespace-nowrap transition-colors ${
+            activeTab === 'chart-of-accounts'
+              ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-500/10'
+              : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900'
+          }`}
+        >
+          <Landmark className="w-3.5 h-3.5" />
+          <span>Chart of Accounts {generalAccounts.length > 0 ? `(${generalAccounts.length})` : ''}</span>
         </button>
       </div>
 
@@ -1169,6 +1205,241 @@ export default function ReportsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 8: CHART OF ACCOUNTS (GENERAL LEDGERS) */}
+      {/* ========================================================================= */}
+      {activeTab === 'chart-of-accounts' && (
+        <div className="space-y-6">
+          {/* Header & Controls */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-serif font-bold text-stone-100 flex items-center gap-2">
+                <Landmark className="w-5 h-5 text-amber-500" />
+                <span>Chart of Accounts (General Ledgers)</span>
+              </h2>
+              <p className="text-xs text-stone-400 mt-0.5">
+                Bank accounts, cash books, partner capital, loans, liabilities and operating expense heads
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-start md:self-auto">
+              <button
+                onClick={() =>
+                  exportToCsv(
+                    `curated_art_chart_of_accounts_${new Date().toISOString().slice(0, 10)}.csv`,
+                    generalAccounts.map((a) => ({
+                      Name: a.name,
+                      Group: a.accountGroup,
+                      Type: a.accountType,
+                      Section: a.section,
+                      OpeningBalance: a.openingBalance,
+                      CurrentBalance: a.currentBalance,
+                      GSTIN: a.gstin || '',
+                      PAN: a.panNo || '',
+                      Mobile: a.mobile || '',
+                      State: a.state || '',
+                      Status: a.isActive ? 'ACTIVE' : 'INACTIVE',
+                    }))
+                  )
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Ledger CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics KPI Bar */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="p-4 bg-stone-900/90 border border-stone-800 rounded-2xl">
+              <div className="flex items-center justify-between text-xs text-stone-400 mb-1">
+                <span>Bank & Cash Heads</span>
+                <Wallet className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="text-xl font-bold font-mono text-emerald-400">
+                {generalAccounts.filter((a) => a.accountGroup === 'Bank & Cash' || a.accountType === 'BANK' || a.accountType === 'CASH').length}
+              </div>
+              <p className="text-[10px] text-stone-400 mt-1">HDFC, SBI & Cash on Hand</p>
+            </div>
+
+            <div className="p-4 bg-stone-900/90 border border-stone-800 rounded-2xl">
+              <div className="flex items-center justify-between text-xs text-stone-400 mb-1">
+                <span>Capital & Reserves</span>
+                <Landmark className="w-4 h-4 text-amber-400" />
+              </div>
+              <div className="text-xl font-bold font-mono text-amber-400">
+                {generalAccounts.filter((a) => a.accountGroup === 'Capital & Reserves' || a.accountType === 'CAPITAL').length}
+              </div>
+              <p className="text-[10px] text-stone-400 mt-1">Partners Capital & Reserves</p>
+            </div>
+
+            <div className="p-4 bg-stone-900/90 border border-stone-800 rounded-2xl">
+              <div className="flex items-center justify-between text-xs text-stone-400 mb-1">
+                <span>Loans & Borrowings</span>
+                <CreditCard className="w-4 h-4 text-rose-400" />
+              </div>
+              <div className="text-xl font-bold font-mono text-rose-400">
+                {generalAccounts.filter((a) => a.accountGroup === 'Loans & Borrowings' || a.accountType === 'LOAN').length}
+              </div>
+              <p className="text-[10px] text-stone-400 mt-1">Secured & Unsecured Loans</p>
+            </div>
+
+            <div className="p-4 bg-stone-900/90 border border-stone-800 rounded-2xl">
+              <div className="flex items-center justify-between text-xs text-stone-400 mb-1">
+                <span>Total General Ledgers</span>
+                <Layers className="w-4 h-4 text-sky-400" />
+              </div>
+              <div className="text-xl font-bold font-mono text-stone-100">
+                {generalAccounts.length}
+              </div>
+              <p className="text-[10px] text-stone-400 mt-1">Distinct Accounting Heads</p>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="p-3 bg-stone-900/90 border border-stone-800 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={genAccountSearch}
+                onChange={(e) => setGenAccountSearch(e.target.value)}
+                placeholder="Search ledger by name, group, PAN, GSTIN..."
+                className="w-full pl-9 pr-4 py-2 bg-stone-950 border border-stone-800 rounded-xl text-stone-100 text-xs focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={genAccountGroupFilter}
+                onChange={(e) => setGenAccountGroupFilter(e.target.value)}
+                className="px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-stone-300 text-xs focus:outline-none focus:border-amber-500"
+              >
+                <option value="ALL">All Account Groups</option>
+                <option value="Bank & Cash">🏦 Bank & Cash</option>
+                <option value="Capital & Reserves">💰 Capital & Reserves</option>
+                <option value="Loans & Borrowings">📜 Loans & Borrowings</option>
+                <option value="Operating Expenses">📊 Operating & Trading Expenses</option>
+                <option value="Current Assets">📦 Current Assets & Stock</option>
+                <option value="Liabilities">⚖️ Liabilities & Duties</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Table */}
+          <div className="bg-stone-900 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-stone-900/90 border-b border-stone-800 text-[10px] uppercase font-bold text-stone-400 tracking-wider">
+                  <tr>
+                    <th className="px-5 py-3.5">Ledger Account Name</th>
+                    <th className="px-4 py-3.5">Account Group</th>
+                    <th className="px-4 py-3.5">Type</th>
+                    <th className="px-4 py-3.5">Tally Section</th>
+                    <th className="px-4 py-3.5 text-right">Opening Balance</th>
+                    <th className="px-4 py-3.5 text-center">PAN / GSTIN</th>
+                    <th className="px-4 py-3.5 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-stone-800/80 text-stone-300">
+                  {loadingGenAccounts ? (
+                    <tr>
+                      <td colSpan="7" className="text-center py-12 text-stone-400 font-serif">
+                        Loading Chart of Accounts...
+                      </td>
+                    </tr>
+                  ) : generalAccounts.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="text-center py-12 text-stone-400">
+                        No general accounts found in the database. Use Master Excel Import to populate.
+                      </td>
+                    </tr>
+                  ) : (
+                    generalAccounts
+                      .filter((a) => {
+                        if (genAccountGroupFilter !== 'ALL' && a.accountGroup !== genAccountGroupFilter) {
+                          return false;
+                        }
+                        if (genAccountSearch) {
+                          const q = genAccountSearch.toLowerCase();
+                          return (
+                            a.name.toLowerCase().includes(q) ||
+                            (a.accountGroup && a.accountGroup.toLowerCase().includes(q)) ||
+                            (a.section && a.section.toLowerCase().includes(q)) ||
+                            (a.panNo && a.panNo.toLowerCase().includes(q)) ||
+                            (a.gstin && a.gstin.toLowerCase().includes(q))
+                          );
+                        }
+                        return true;
+                      })
+                      .map((acc) => {
+                        const isBankOrCash = acc.accountGroup === 'Bank & Cash' || acc.accountType === 'BANK' || acc.accountType === 'CASH';
+                        const isCapital = acc.accountGroup === 'Capital & Reserves' || acc.accountType === 'CAPITAL';
+                        const isLoan = acc.accountGroup === 'Loans & Borrowings' || acc.accountType === 'LOAN';
+                        const isExpense = acc.accountGroup === 'Operating Expenses' || acc.accountType === 'EXPENSE';
+
+                        return (
+                          <tr key={acc.id} className="hover:bg-stone-800/40 transition-colors">
+                            <td className="px-5 py-3.5 font-semibold text-stone-100 font-serif">
+                              {acc.name}
+                            </td>
+                            <td className="px-4 py-3.5">
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                                  isBankOrCash
+                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                    : isCapital
+                                    ? 'bg-amber-950 text-amber-400 border border-amber-800'
+                                    : isLoan
+                                    ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                                    : isExpense
+                                    ? 'bg-sky-950 text-sky-400 border border-sky-800'
+                                    : 'bg-stone-800 text-stone-300'
+                                }`}
+                              >
+                                {acc.accountGroup || 'General Ledger'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 font-mono text-[11px] text-stone-400">
+                              {acc.accountType}
+                            </td>
+                            <td className="px-4 py-3.5 text-stone-400 text-[11px]">
+                              {acc.section || '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-right font-mono font-semibold">
+                              <span
+                                className={
+                                  acc.openingBalance < 0
+                                    ? 'text-rose-400'
+                                    : acc.openingBalance > 0
+                                    ? 'text-emerald-400'
+                                    : 'text-stone-400'
+                                }
+                              >
+                                ₹{Math.abs(acc.openingBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                {acc.openingBalance < 0 ? ' (Dr)' : acc.openingBalance > 0 ? ' (Cr)' : ''}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3.5 text-center font-mono text-[10px] text-stone-400">
+                              {acc.panNo || acc.gstin || '-'}
+                            </td>
+                            <td className="px-4 py-3.5 text-center">
+                              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
+                                {acc.isActive ? 'ACTIVE' : 'INACTIVE'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

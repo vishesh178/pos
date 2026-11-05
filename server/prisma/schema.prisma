@@ -450,3 +450,24 @@ model Pricebook {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 }
+
+model GeneralAccount {
+  id             String   @id @default(cuid())
+  name           String
+  section        String?  // Exact section header from file, e.g. "Cash at Bank", "Secured Loans", "Capital"
+  accountGroup   String   @default("General Ledger") // Capital, Loans & Liabilities, Bank & Cash, Expenses, Assets
+  accountType    String   @default("GENERAL") // BANK, CASH, LOAN, CAPITAL, EXPENSE, ASSET, LIABILITY, GENERAL
+  openingBalance Float    @default(0.0)
+  currentBalance Float    @default(0.0)
+  mobile         String?
+  address        String?
+  state          String?  @default("Gujarat")
+  stateCode      String?  @default("24")
+  gstin          String?
+  panNo          String?
+  notes          String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+

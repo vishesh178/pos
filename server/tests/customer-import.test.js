@@ -314,8 +314,23 @@ test('Smart Multi-Entity Master Account Import - Routes to Suppliers, Customers 
     });
     assert.equal(loan, null, 'Loan account must never be added to Customer directory');
     assert.equal(cap, null, 'Capital account must never be added to Customer directory');
+
+    // 7. Verify General Accounts were stored in GeneralAccount table
+    const genLoan = await prisma.generalAccount.findFirst({
+      where: { name: 'TEST HDFC BANK CAR LOAN' },
+    });
+    const genCap = await prisma.generalAccount.findFirst({
+      where: { name: 'TEST PARTNER CAPITAL ACCOUNT' },
+    });
+    assert.ok(genLoan, 'Loan account must be saved in GeneralAccount table');
+    assert.equal(genLoan.accountType, 'LOAN');
+    assert.equal(genLoan.accountGroup, 'Loans & Borrowings');
+    assert.ok(genCap, 'Capital account must be saved in GeneralAccount table');
+    assert.equal(genCap.accountType, 'CAPITAL');
+    assert.equal(genCap.accountGroup, 'Capital & Reserves');
   } finally {
     await prisma.customer.deleteMany({ where: { name: { in: allNames } } });
     await prisma.supplier.deleteMany({ where: { name: { in: allNames } } });
+    await prisma.generalAccount.deleteMany({ where: { name: { in: allNames } } });
   }
 });

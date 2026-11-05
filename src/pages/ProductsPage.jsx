@@ -687,31 +687,37 @@ export default function ProductsPage() {
         </div>
       </div>
 
-      {/* Modals */}
-      <ProductModal
-        isOpen={isProductModalOpen}
-        onClose={() => setIsProductModalOpen(false)}
-        product={selectedProduct}
-        onSaved={fetchProducts}
-        categories={categories}
-      />
+      {/* Modals - Unmounted when closed for zero hook divergence */}
+      {isProductModalOpen && (
+        <ProductModal
+          isOpen={isProductModalOpen}
+          onClose={() => setIsProductModalOpen(false)}
+          product={selectedProduct}
+          onSaved={fetchProducts}
+          categories={categories}
+        />
+      )}
 
-      <BarcodePrintModal
-        isOpen={isBarcodeModalOpen}
-        onClose={() => {
-          setIsBarcodeModalOpen(false);
-          setBarcodeProduct(null);
-          setBarcodeProductsList([]);
-        }}
-        product={barcodeProduct}
-        products={barcodeProductsList}
-      />
+      {isBarcodeModalOpen && (
+        <BarcodePrintModal
+          isOpen={isBarcodeModalOpen}
+          onClose={() => {
+            setIsBarcodeModalOpen(false);
+            setBarcodeProduct(null);
+            setBarcodeProductsList([]);
+          }}
+          product={barcodeProduct}
+          products={barcodeProductsList}
+        />
+      )}
 
-      <ImportModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        onImported={fetchProducts}
-      />
+      {isImportModalOpen && (
+        <ImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onImported={fetchProducts}
+        />
+      )}
     </div>
   );
 }

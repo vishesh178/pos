@@ -126,9 +126,19 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
     return {
       targetEntity: 'ACCOUNTING_LEDGER',
       customerType: null,
-      label: 'General Ledger Account',
-      badgeColor: 'bg-stone-800 text-stone-400 border-stone-700',
-      dest: 'Excluded from Retail Billing',
+      label: s.includes('bank')
+        ? 'Bank Account'
+        : s.includes('cash')
+        ? 'Cash Account'
+        : s.includes('loan')
+        ? 'Loan Account'
+        : s.includes('capital')
+        ? 'Capital Account'
+        : s.includes('expense') || s.includes('salary')
+        ? 'Expense Ledger'
+        : 'General Ledger',
+      badgeColor: 'bg-stone-800 text-amber-300 border-amber-800/40',
+      dest: 'Chart of Accounts (General Ledger)',
       isLedger: true,
     };
   };
@@ -780,17 +790,17 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
                 </span>
               </div>
               <div className="p-2 bg-stone-900/80 rounded-lg border border-stone-800">
-                <span className="block text-[10px] text-stone-400 font-sans">Ledgers Excluded</span>
-                <span className="text-stone-400 font-bold text-sm">
+                <span className="block text-[10px] text-stone-400 font-sans">General Accounts</span>
+                <span className="text-amber-400 font-bold text-sm">
                   {result.categorizedLedgers || 0}
                 </span>
                 <span className="block text-[9px] text-stone-500 font-sans mt-0.5">
-                  Capital, Bank, Loans
+                  Saved to Chart of Accounts
                 </span>
               </div>
               <div className="p-2 bg-stone-900/80 rounded-lg border border-stone-800">
                 <span className="block text-[10px] text-stone-400 font-sans">Reorganized</span>
-                <span className="text-amber-400 font-bold text-sm">
+                <span className="text-stone-300 font-bold text-sm">
                   {result.cleanedMisrouted || 0}
                 </span>
                 <span className="block text-[9px] text-stone-500 font-sans mt-0.5">
@@ -852,10 +862,10 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     filterType === 'ledgers'
                       ? 'bg-stone-700 text-stone-100 font-bold shadow'
-                      : 'bg-stone-950 border border-stone-800 text-stone-500 hover:text-stone-300'
+                      : 'bg-stone-950 border border-stone-800 text-stone-400 hover:text-stone-200'
                   }`}
                 >
-                  General Ledgers ({ledgersCount} Excluded)
+                  General Accounts ({ledgersCount})
                 </button>
               </div>
 

@@ -364,6 +364,26 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
       if (s.gstin) existingSuppliersByGst.set(s.gstin.trim().toUpperCase(), s);
     }
 
+    // Fetch existing general accounts for in-memory deduplication
+    const existingGenAccounts = await prisma.generalAccount.findMany({
+      select: {
+        id: true,
+        name: true,
+        accountGroup: true,
+        accountType: true,
+        address: true,
+        state: true,
+        stateCode: true,
+        mobile: true,
+        gstin: true,
+        panNo: true,
+      },
+    });
+    const existingGenAccountsByName = new Map();
+    for (const g of existingGenAccounts) {
+      if (g.name) existingGenAccountsByName.set(g.name.trim().toLowerCase(), g);
+    }
+
     let importedCustomers = 0;
     let updatedCustomers = 0;
     let skippedCustomers = 0;
@@ -372,6 +392,8 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
     let updatedSuppliers = 0;
     let skippedSuppliers = 0;
 
+    let importedLedgers = 0;
+    let updatedLedgers = 0;
     let categorizedLedgers = 0;
     let cleanedMisrouted = 0;
 
@@ -483,9 +505,91 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
 
       // ==========================================
       // ROUTING 1: GENERAL LEDGER ACCOUNTING ACCOUNTS
-      // (Capital, Loans, Bank, Cash, Expenses, etc. - NEVER add to retail billing)
+      // (Capital, Loans, Bank, Cash, Expenses, etc. - Saved to GeneralAccount table)
       // ==========================================
       if (routing.target === 'ACCOUNTING_LEDGER') {
+        const ledgerBatchKey = `ledger:${nameKey}`;
+        if (seenInCurrentBatch.has(ledgerBatchKey)) {
+          continue;
+        }
+        seenInCurrentBatch.add(ledgerBatchKey);
+
+        const secStr = String(item.section || 'General Ledger').trim();
+        const secLower = secStr.toLowerCase();
+
+        let accountGroup = 'General Ledger';
+        let accountType = 'GENERAL';
+
+        if (secLower.includes('bank')) {
+          accountGroup = 'Bank & Cash Accounts';
+          accountType = 'BANK';
+        } else if (secLower.includes('cash')) {
+          accountGroup = 'Bank & Cash Accounts';
+          accountType = 'CASH';
+        } else if (secLower.includes('loan')) {
+          accountGroup = 'Loans & Borrowings';
+          accountType = 'LOAN';
+        } else if (secLower.includes('capital') || secLower.includes('reserve')) {
+          accountGroup = 'Capital & Reserves';
+          accountType = 'CAPITAL';
+        } else if (
+          secLower.includes('expense') ||
+          secLower.includes('salary') ||
+          secLower.includes('purchase stock')
+        ) {
+          accountGroup = 'Operating & P&L Expenses';
+          accountType = 'EXPENSE';
+        } else if (secLower.includes('income') || secLower.includes('sales')) {
+          accountGroup = 'Revenue & Income';
+          accountType = 'INCOME';
+        } else if (secLower.includes('liability') || secLower.includes('liabilities')) {
+          accountGroup = 'Liabilities';
+          accountType = 'LIABILITY';
+        } else {
+          accountGroup = 'Current Assets & Stock';
+          accountType = 'ASSET';
+        }
+
+        const existingGenAcc = existingGenAccountsByName.get(nameKey);
+        if (existingGenAcc) {
+          if (overwriteExisting) {
+            await prisma.generalAccount.update({
+              where: { id: existingGenAcc.id },
+              data: {
+                section: secStr,
+                accountGroup,
+                accountType,
+                mobile: cleanMobile !== '-' ? cleanMobile : existingGenAcc.mobile,
+                address: cleanAddress || existingGenAcc.address,
+                state: cleanState || existingGenAcc.state,
+                stateCode: cleanStateCode || existingGenAcc.stateCode,
+                gstin: cleanGstin || existingGenAcc.gstin,
+                panNo: cleanPan || existingGenAcc.panNo,
+              },
+            });
+            updatedLedgers++;
+          }
+        } else {
+          const newGenAcc = await prisma.generalAccount.create({
+            data: {
+              name: cleanName,
+              section: secStr,
+              accountGroup,
+              accountType,
+              openingBalance: openBal,
+              currentBalance: openBal,
+              mobile: cleanMobile !== '-' ? cleanMobile : null,
+              address: cleanAddress,
+              state: cleanState,
+              stateCode: cleanStateCode,
+              gstin: cleanGstin,
+              panNo: cleanPan,
+            },
+          });
+          existingGenAccountsByName.set(nameKey, newGenAcc);
+          importedLedgers++;
+        }
+
         categorizedLedgers++;
         breakdown.generalLedgers++;
 
@@ -697,7 +801,8 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
       }
     }
 
-    const message = `Smart Account Routing Complete: ${importedCustomers + updatedCustomers} Customers organized (${breakdown.retailers} Retail, ${breakdown.wholesalers} Wholesale, ${breakdown.architects} Architects), ${importedSuppliers + updatedSuppliers} Suppliers in Supplier Directory, ${categorizedLedgers} General Ledgers safely excluded.${cleanedMisrouted > 0 ? ` (${cleanedMisrouted} previously misrouted entries cleaned)` : ''}`;
+    const totalLedgers = importedLedgers + updatedLedgers;
+    const message = `Smart Account Routing Complete: ${importedCustomers + updatedCustomers} Customers organized (${breakdown.retailers} Retail, ${breakdown.wholesalers} Wholesale, ${breakdown.architects} Architects), ${importedSuppliers + updatedSuppliers} Suppliers in Supplier Directory, and ${totalLedgers} General Accounts stored in Chart of Accounts.${cleanedMisrouted > 0 ? ` (${cleanedMisrouted} previously misrouted entries cleaned)` : ''}`;
 
     res.json({
       success: true,
@@ -708,7 +813,9 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
       importedSuppliers,
       updatedSuppliers,
       skippedSuppliers,
-      categorizedLedgers,
+      importedLedgers,
+      updatedLedgers,
+      categorizedLedgers: totalLedgers,
       cleanedMisrouted,
       breakdown,
       total: items.length,
