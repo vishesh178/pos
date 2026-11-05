@@ -23,6 +23,7 @@ import ProductModal from '../components/products/ProductModal';
 import BarcodePrintModal from '../components/products/BarcodePrintModal';
 import ImportModal from '../components/products/ImportModal';
 import { compressImageFile } from '../utils/imageCompressor';
+import { downloadExportFile } from '../utils/exportDownloader';
 
 export default function ProductsPage() {
   const navigate = useNavigate();
@@ -242,15 +243,14 @@ export default function ProductsPage() {
             <span className="hidden sm:inline">Wholesale</span>
           </button>
 
-          <a
-            href={`/api/products/export/csv${token ? `?token=${encodeURIComponent(token)}` : ''}`}
-            download
+          <button
+            onClick={() => downloadExportFile('/api/export/products?format=xlsx', 'curated_art_products.xlsx', token)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-stone-100 hover:border-stone-700 text-xs font-semibold transition-colors cursor-pointer"
-            title="Export CSV"
+            title="Export Products Catalog (.xlsx)"
           >
             <Download className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Export</span>
-          </a>
+          </button>
 
           {hasPermission(['ADMIN', 'MANAGER']) && (
             <button

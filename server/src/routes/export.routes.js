@@ -34,6 +34,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       stockMovements,
       expenses,
       pricebooks,
+      generalAccounts,
     ] = await Promise.all([
       prisma.customer.findMany({ include: { pricebook: true }, orderBy: { name: 'asc' } }),
       prisma.product.findMany({ include: { category: true, supplier: true }, orderBy: { name: 'asc' } }),
@@ -43,6 +44,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       prisma.stockMovement.findMany({ include: { product: true }, orderBy: { createdAt: 'desc' }, take: 10000 }),
       prisma.expense.findMany({ orderBy: { expenseDate: 'desc' } }),
       prisma.pricebook.findMany({ orderBy: { name: 'asc' } }),
+      prisma.generalAccount.findMany({ orderBy: { name: 'asc' } }),
     ]);
 
     const wb = XLSX.utils.book_new();
@@ -181,6 +183,25 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pricebookRows), 'Pricebooks');
 
+    // Sheet 9: Chart of Accounts (General Ledgers)
+    const ledgerRows = (generalAccounts || []).map((ga) => ({
+      'Account Name': ga.name,
+      'Account Group': ga.accountGroup,
+      'Account Type': ga.accountType,
+      'Section': ga.section || '',
+      'Opening Balance (₹)': ga.openingBalance || 0,
+      'Current Balance (₹)': ga.currentBalance || 0,
+      'Mobile': ga.mobile || '',
+      'GSTIN': ga.gstin || '',
+      'PAN No': ga.panNo || '',
+      'State': ga.state || '',
+      'State Code': ga.stateCode || '',
+      'Address': ga.address || '',
+      'Status': ga.isActive ? 'ACTIVE' : 'INACTIVE',
+      'Notes': ga.notes || '',
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ledgerRows), 'Chart_of_Accounts');
+
     req.logAudit?.('EXPORT_ALL_DATA', 'SYSTEM', null, {
       sheets: wb.SheetNames,
       totalCustomers: customers.length,
@@ -196,7 +217,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
 });
 
 // 2. GET /api/export/customers - Export Customers Only (.xlsx or .csv)
-router.get('/customers', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.get('/customers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
   try {
     const format = req.query.format === 'csv' ? 'csv' : 'xlsx';
     const customers = await prisma.customer.findMany({
@@ -296,7 +317,7 @@ router.get('/suppliers', authenticateToken, requireRole(['ADMIN', 'MANAGER']), a
 });
 
 // 5. GET /api/export/invoices - Export Sales Invoices (.xlsx or .csv)
-router.get('/invoices', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
+router.get('/invoices', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
   try {
     const format = req.query.format === 'csv' ? 'csv' : 'xlsx';
     const invoices = await prisma.invoice.findMany({ orderBy: { createdAt: 'desc' } });
@@ -418,6 +439,38 @@ router.get('/expenses', authenticateToken, requireRole(['ADMIN', 'MANAGER']), as
   } catch (err) {
     console.error('Export expenses error:', err);
     res.status(500).json({ error: 'Failed to export expenses: ' + err.message });
+  }
+});
+
+// 9. GET /api/export/general-accounts - Export General Accounts / Chart of Accounts (.xlsx or .csv)
+router.get('/general-accounts', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
+  try {
+    const format = req.query.format === 'csv' ? 'csv' : 'xlsx';
+    const accounts = await prisma.generalAccount.findMany({ orderBy: { name: 'asc' } });
+
+    const rows = accounts.map((ga) => ({
+      'Account Name': ga.name,
+      'Account Group': ga.accountGroup,
+      'Account Type': ga.accountType,
+      'Section': ga.section || '',
+      'Opening Balance': ga.openingBalance || 0,
+      'Current Balance': ga.currentBalance || 0,
+      'Mobile': ga.mobile || '',
+      'GSTIN': ga.gstin || '',
+      'PAN No': ga.panNo || '',
+      'State': ga.state || '',
+      'State Code': ga.stateCode || '',
+      'Address': ga.address || '',
+      'Status': ga.isActive ? 'ACTIVE' : 'INACTIVE',
+      'Notes': ga.notes || '',
+    }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Chart_of_Accounts');
+    sendSpreadsheet(res, wb, 'chart_of_accounts_export', format);
+  } catch (err) {
+    console.error('Export general accounts error:', err);
+    res.status(500).json({ error: 'Failed to export general accounts: ' + err.message });
   }
 });
 

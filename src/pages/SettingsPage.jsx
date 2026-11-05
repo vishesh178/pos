@@ -24,8 +24,10 @@ import {
   Receipt,
   Boxes,
   Tag,
+  Landmark,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { downloadExportFile } from '../utils/exportDownloader';
 
 export default function SettingsPage() {
   const { token, hasPermission } = useAuth();
@@ -796,14 +798,14 @@ export default function SettingsPage() {
               </div>
 
               <div className="shrink-0">
-                <a
-                  href={`/api/export/all?token=${encodeURIComponent(token)}`}
-                  download
+                <button
+                  type="button"
+                  onClick={() => downloadExportFile('/api/export/all', 'curated_art_complete_business_data.xlsx', token)}
                   className="flex items-center gap-2 px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-lg shadow-amber-950/50 transition-all cursor-pointer"
                 >
                   <Download className="w-4 h-4" />
                   <span>Download Complete Master (.xlsx)</span>
-                </a>
+                </button>
               </div>
             </div>
           </div>
@@ -832,20 +834,20 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
-                  <a
-                    href={`/api/export/customers?token=${encodeURIComponent(token)}&format=xlsx`}
-                    download
-                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/customers?format=xlsx', 'curated_art_customers.xlsx', token)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     Excel (.xlsx)
-                  </a>
-                  <a
-                    href={`/api/export/customers?token=${encodeURIComponent(token)}&format=csv`}
-                    download
-                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/customers?format=csv', 'curated_art_customers.csv', token)}
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     CSV
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -861,20 +863,20 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
-                  <a
-                    href={`/api/export/products?token=${encodeURIComponent(token)}&format=xlsx`}
-                    download
-                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/products?format=xlsx', 'curated_art_products.xlsx', token)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     Excel (.xlsx)
-                  </a>
-                  <a
-                    href={`/api/export/products?token=${encodeURIComponent(token)}&format=csv`}
-                    download
-                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/products?format=csv', 'curated_art_products.csv', token)}
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     CSV
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -890,20 +892,20 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
-                  <a
-                    href={`/api/export/suppliers?token=${encodeURIComponent(token)}&format=xlsx`}
-                    download
-                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/suppliers?format=xlsx', 'curated_art_suppliers.xlsx', token)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     Excel (.xlsx)
-                  </a>
-                  <a
-                    href={`/api/export/suppliers?token=${encodeURIComponent(token)}&format=csv`}
-                    download
-                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/suppliers?format=csv', 'curated_art_suppliers.csv', token)}
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     CSV
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -919,20 +921,20 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
-                  <a
-                    href={`/api/export/invoices?token=${encodeURIComponent(token)}&format=xlsx`}
-                    download
-                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/invoices?format=xlsx', 'curated_art_sales_invoices.xlsx', token)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     Excel (.xlsx)
-                  </a>
-                  <a
-                    href={`/api/export/invoices?token=${encodeURIComponent(token)}&format=csv`}
-                    download
-                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/invoices?format=csv', 'curated_art_sales_invoices.csv', token)}
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     CSV
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -948,20 +950,20 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
-                  <a
-                    href={`/api/export/purchases?token=${encodeURIComponent(token)}&format=xlsx`}
-                    download
-                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/purchases?format=xlsx', 'curated_art_purchase_bills.xlsx', token)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     Excel (.xlsx)
-                  </a>
-                  <a
-                    href={`/api/export/purchases?token=${encodeURIComponent(token)}&format=csv`}
-                    download
-                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/purchases?format=csv', 'curated_art_purchase_bills.csv', token)}
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     CSV
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -977,20 +979,20 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
-                  <a
-                    href={`/api/export/inventory?token=${encodeURIComponent(token)}&format=xlsx`}
-                    download
-                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/inventory?format=xlsx', 'curated_art_stock_movement_ledger.xlsx', token)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     Excel (.xlsx)
-                  </a>
-                  <a
-                    href={`/api/export/inventory?token=${encodeURIComponent(token)}&format=csv`}
-                    download
-                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/inventory?format=csv', 'curated_art_stock_movement_ledger.csv', token)}
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     CSV
-                  </a>
+                  </button>
                 </div>
               </div>
 
@@ -1006,20 +1008,49 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
-                  <a
-                    href={`/api/export/expenses?token=${encodeURIComponent(token)}&format=xlsx`}
-                    download
-                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/expenses?format=xlsx', 'curated_art_expenses.xlsx', token)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     Excel (.xlsx)
-                  </a>
-                  <a
-                    href={`/api/export/expenses?token=${encodeURIComponent(token)}&format=csv`}
-                    download
-                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/expenses?format=csv', 'curated_art_expenses.csv', token)}
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     CSV
-                  </a>
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 8: Chart of Accounts */}
+              <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-stone-100 font-semibold text-sm">
+                    <Landmark className="w-4 h-4 text-amber-500" />
+                    <span>Chart of Accounts</span>
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    Bank accounts, cash on hand, loans, liabilities, capital, and operating expense ledger heads.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/general-accounts?format=xlsx', 'curated_art_chart_of_accounts.xlsx', token)}
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
+                  >
+                    Excel (.xlsx)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadExportFile('/api/export/general-accounts?format=csv', 'curated_art_chart_of_accounts.csv', token)}
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
+                  >
+                    CSV
+                  </button>
                 </div>
               </div>
             </div>

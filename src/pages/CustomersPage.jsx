@@ -23,6 +23,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import CustomerLedgerModal from '../components/customers/CustomerLedgerModal';
 import CustomerImportModal from '../components/customers/CustomerImportModal';
+import { downloadExportFile } from '../utils/exportDownloader';
 
 export default function CustomersPage() {
   const { token, hasPermission } = useAuth();
@@ -32,6 +33,7 @@ export default function CustomersPage() {
   const [customerType, setCustomerType] = useState('all');
   const [filterOnlyDue, setFilterOnlyDue] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Add / Edit Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -294,15 +296,23 @@ export default function CustomersPage() {
 
         {hasPermission(['ADMIN', 'MANAGER', 'BILLING']) && (
           <div className="self-start sm:self-auto flex items-center gap-2">
-            <a
-              href={`/api/export/customers?token=${encodeURIComponent(token)}&format=xlsx`}
-              download
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-200 hover:text-amber-400 text-xs font-semibold transition-all shadow-sm cursor-pointer"
+            <button
+              onClick={async () => {
+                setIsExporting(true);
+                await downloadExportFile(
+                  '/api/export/customers?format=xlsx',
+                  'curated_art_customers.xlsx',
+                  token
+                );
+                setIsExporting(false);
+              }}
+              disabled={isExporting}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-200 hover:text-amber-400 text-xs font-semibold transition-all shadow-sm cursor-pointer disabled:opacity-50"
               title="Export all customers to Excel (.xlsx)"
             >
-              <Download className="w-3.5 h-3.5 text-amber-500" />
-              <span>Export</span>
-            </a>
+              <Download className={`w-3.5 h-3.5 text-amber-500 ${isExporting ? 'animate-bounce' : ''}`} />
+              <span>{isExporting ? 'Exporting...' : 'Export'}</span>
+            </button>
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-200 hover:text-amber-400 text-xs font-semibold transition-all shadow-sm cursor-pointer"
