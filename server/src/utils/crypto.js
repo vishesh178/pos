@@ -53,8 +53,44 @@ function decrypt(cipherString) {
   }
 }
 
+/**
+ * Encrypt binary buffer with AES-256-GCM
+ * Output format: [16 bytes IV][16 bytes AuthTag][Encrypted ciphertext bytes]
+ */
+function encryptBuffer(buffer) {
+  if (!buffer) return null;
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return Buffer.concat([iv, authTag, encrypted]);
+}
+
+/**
+ * Decrypt binary buffer encrypted with encryptBuffer()
+ */
+function decryptBuffer(encryptedBuffer) {
+  if (!encryptedBuffer || encryptedBuffer.length < IV_LENGTH + AUTH_TAG_LENGTH) return null;
+  try {
+    const key = getEncryptionKey();
+    const iv = encryptedBuffer.subarray(0, IV_LENGTH);
+    const authTag = encryptedBuffer.subarray(IV_LENGTH, IV_LENGTH + AUTH_TAG_LENGTH);
+    const encryptedData = encryptedBuffer.subarray(IV_LENGTH + AUTH_TAG_LENGTH);
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+    return Buffer.concat([decipher.update(encryptedData), decipher.final()]);
+  } catch (err) {
+    console.error('Binary decryption failed:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   encrypt,
   decrypt,
+  encryptBuffer,
+  decryptBuffer,
 };
 

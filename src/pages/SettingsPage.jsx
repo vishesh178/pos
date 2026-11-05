@@ -12,6 +12,11 @@ import {
   CheckCircle2,
   AlertCircle,
   X,
+  Trash2,
+  Lock,
+  HardDrive,
+  ShieldCheck,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -47,7 +52,9 @@ export default function SettingsPage() {
 
   // Backups State
   const [backups, setBackups] = useState([]);
+  const [backupStatus, setBackupStatus] = useState(null);
   const [backupLoading, setBackupLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -60,13 +67,15 @@ export default function SettingsPage() {
       setProfile(dataProf);
 
       if (hasPermission('ADMIN')) {
-        const [resUsers, resBackups] = await Promise.all([
+        const [resUsers, resBackups, resStatus] = await Promise.all([
           fetch('/api/auth/users', { headers: { Authorization: `Bearer ${token}` } }),
           fetch('/api/backup/list', { headers: { Authorization: `Bearer ${token}` } }),
+          fetch('/api/backup/status', { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
         if (resUsers.ok) setUsers(await resUsers.json());
         if (resBackups.ok) setBackups(await resBackups.json());
+        if (resStatus && resStatus.ok) setBackupStatus(await resStatus.json());
       }
     } catch (err) {
       console.error('Failed to load settings:', err);
@@ -141,12 +150,16 @@ export default function SettingsPage() {
     }
   };
 
-  const handleCreateBackup = async () => {
+  const handleCreateBackup = async (encrypted = false) => {
     setBackupLoading(true);
     try {
       const res = await fetch('/api/backup/create', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ encrypted }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -157,6 +170,49 @@ export default function SettingsPage() {
       alert(err.message);
     } finally {
       setBackupLoading(false);
+    }
+  };
+
+  const handleDownloadLiveBackup = (encrypted = false) => {
+    setDownloading(true);
+    try {
+      const url = `/api/backup/download?token=${encodeURIComponent(token)}${encrypted ? '&encrypted=true' : ''}`;
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', '');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert('Download failed: ' + err.message);
+    } finally {
+      setTimeout(() => setDownloading(false), 1200);
+    }
+  };
+
+  const handleDownloadFile = (fileName) => {
+    const url = `/api/backup/download/${encodeURIComponent(fileName)}?token=${encodeURIComponent(token)}`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDeleteBackup = async (fileName) => {
+    if (!window.confirm(`Are you sure you want to permanently delete backup "${fileName}" from the vault?`)) return;
+
+    try {
+      const res = await fetch(`/api/backup/${encodeURIComponent(fileName)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      loadData();
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -441,71 +497,204 @@ export default function SettingsPage() {
       {/* TAB 3: DATABASE BACKUP & RESTORE */}
       {activeTab === 'backup' && hasPermission('ADMIN') && (
         <div className="space-y-6">
-          <div className="p-6 bg-stone-900 border border-stone-800 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h3 className="font-serif font-bold text-base text-stone-100">
-                Instant Local SQLite Database Backup
-              </h3>
-              <p className="text-xs text-stone-400 mt-1">
-                Creates an immutable snapshot of all invoices, products, stock movements, and sync jobs
-              </p>
+          {/* Top Status & Metrics Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                <HardDrive className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-stone-400 uppercase font-bold tracking-wider">Live SQLite Store</p>
+                <p className="text-base font-bold font-mono text-stone-100">
+                  {backupStatus?.activeDbSizeKb ? `${backupStatus.activeDbSizeKb} KB` : 'Active'}
+                </p>
+                <p className="text-[10px] text-stone-500 truncate mt-0.5">curated_art.db</p>
+              </div>
             </div>
 
-            <button
-              onClick={handleCreateBackup}
-              disabled={backupLoading}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-md"
-            >
-              <Database className="w-4 h-4" />
-              <span>{backupLoading ? 'Creating Snapshot...' : 'Create Snapshot Backup'}</span>
-            </button>
+            <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+                <Database className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-stone-400 uppercase font-bold tracking-wider">Local Snapshot Vault</p>
+                <p className="text-base font-bold font-mono text-stone-100">
+                  {backups.length} Snapshots
+                </p>
+                <p className="text-[10px] text-stone-500 truncate mt-0.5">
+                  {backupStatus?.totalBackupsSizeKb ? `${(backupStatus.totalBackupsSizeKb / 1024).toFixed(1)} MB stored` : 'database/backups/'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] text-stone-400 uppercase font-bold tracking-wider">Automated Daily Protection</p>
+                <p className="text-base font-bold text-emerald-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>Active</span>
+                </p>
+                <p className="text-[10px] text-stone-500 truncate mt-0.5">Daily midnight • 30d retention</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Off-Site 1-Click Download Hero Banner */}
+          <div className="p-5 sm:p-6 bg-stone-900/90 border border-amber-500/30 rounded-2xl shadow-xl backdrop-blur-md">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="space-y-1.5 max-w-xl">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-wider">
+                    Recommended Security Practice
+                  </span>
+                </div>
+                <h3 className="font-serif font-bold text-lg text-stone-100">
+                  Off-Site & One-Click Database Download
+                </h3>
+                <p className="text-xs text-stone-400 leading-relaxed">
+                  All transactions, products, customer accounts, and stock movements are stored locally on this machine. Download a complete snapshot to your personal laptop, flash drive, or cloud storage regularly to protect against disk corruption or server termination.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleDownloadLiveBackup(false)}
+                  disabled={downloading}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-md shadow-amber-950/40 transition-all cursor-pointer disabled:opacity-50"
+                  title="Download raw SQLite database file directly to your downloads folder"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{downloading ? 'Downloading...' : 'Download Database (.sqlite)'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleDownloadLiveBackup(true)}
+                  disabled={downloading}
+                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-stone-950 border border-amber-500/40 hover:bg-stone-800 text-amber-300 font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                  title="Download AES-256 encrypted database snapshot for safe cloud storage"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Encrypted (.enc)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleCreateBackup(false)}
+                  disabled={backupLoading}
+                  className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                  title="Create a point-in-time snapshot directly in server vault"
+                >
+                  <Database className="w-3.5 h-3.5 text-stone-400" />
+                  <span>{backupLoading ? 'Saving...' : 'Vault Snapshot'}</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Backup History Table */}
           <div className="bg-stone-900 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
-            <div className="px-5 py-3.5 border-b border-stone-800">
-              <h4 className="font-serif font-bold text-sm text-stone-100">
-                Available Backups in Local Vault (`database/backups/`)
-              </h4>
+            <div className="px-5 py-3.5 border-b border-stone-800 flex items-center justify-between">
+              <div>
+                <h4 className="font-serif font-bold text-sm text-stone-100">
+                  Available Backups in Local Vault (`database/backups/`)
+                </h4>
+                <p className="text-[11px] text-stone-400">
+                  Historical point-in-time snapshots available for download or immediate recovery
+                </p>
+              </div>
+              <span className="text-xs font-mono text-stone-400">{backups.length} total</span>
             </div>
 
-            <table className="w-full text-left text-xs">
-              <thead className="bg-stone-900 border-b border-stone-800 text-[10px] uppercase font-bold text-stone-400">
-                <tr>
-                  <th className="px-5 py-3">Backup File Name</th>
-                  <th className="px-4 py-3">File Size</th>
-                  <th className="px-4 py-3">Created At</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-stone-800 text-stone-300 font-mono">
-                {backups.length === 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-stone-900 border-b border-stone-800 text-[10px] uppercase font-bold text-stone-400 tracking-wider">
                   <tr>
-                    <td colSpan="4" className="text-center py-8 text-stone-400 font-sans">
-                      No backups created yet. Click "Create Snapshot Backup" above.
-                    </td>
+                    <th className="px-5 py-3">Backup File Name</th>
+                    <th className="px-4 py-3">Type</th>
+                    <th className="px-4 py-3">File Size</th>
+                    <th className="px-4 py-3">Created At</th>
+                    <th className="px-5 py-3 text-right">Actions</th>
                   </tr>
-                ) : (
-                  backups.map((b) => (
-                    <tr key={b.fileName} className="hover:bg-stone-800/40">
-                      <td className="px-5 py-3 font-semibold text-stone-100">{b.fileName}</td>
-                      <td className="px-4 py-3 text-amber-500 font-bold">{b.sizeKb} KB</td>
-                      <td className="px-4 py-3 text-stone-400 text-[11px]">
-                        {new Date(b.createdAt).toLocaleString('en-IN')}
-                      </td>
-                      <td className="px-5 py-3 text-right font-sans">
-                        <button
-                          onClick={() => handleRestoreBackup(b.fileName)}
-                          className="px-2.5 py-1 rounded bg-stone-800 hover:bg-amber-500 hover:text-stone-950 text-stone-300 text-xs font-semibold transition-colors"
-                        >
-                          Restore
-                        </button>
+                </thead>
+                <tbody className="divide-y divide-stone-800/80 text-stone-300 font-mono">
+                  {backups.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="text-center py-10 text-stone-400 font-sans">
+                        No backups created yet. Click "Download Database (.sqlite)" or "Vault Snapshot" above.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    backups.map((b) => (
+                      <tr key={b.fileName} className="hover:bg-stone-800/40 transition-colors">
+                        <td className="px-5 py-3 font-semibold text-stone-100 flex items-center gap-2">
+                          {b.isEncrypted ? (
+                            <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          ) : (
+                            <HardDrive className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                          )}
+                          <span className="truncate max-w-xs">{b.fileName}</span>
+                        </td>
+                        <td className="px-4 py-3 font-sans">
+                          {b.isEncrypted ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-950/60 text-amber-400 border border-amber-800 font-semibold">
+                              AES-256 Encrypted
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-stone-800 text-stone-300 font-semibold">
+                              SQLite Database
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-amber-400 font-bold">{b.sizeKb} KB</td>
+                        <td className="px-4 py-3 text-stone-400 text-[11px] font-sans">
+                          {new Date(b.createdAt).toLocaleString('en-IN', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short',
+                          })}
+                        </td>
+                        <td className="px-5 py-3 text-right font-sans">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadFile(b.fileName)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold transition-colors cursor-pointer"
+                              title="Download backup file to laptop"
+                            >
+                              <Download className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Download</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRestoreBackup(b.fileName)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-amber-500 hover:text-stone-950 text-stone-300 text-xs font-semibold transition-colors cursor-pointer"
+                              title="Restore database from this snapshot"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              <span>Restore</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteBackup(b.fileName)}
+                              className="p-1.5 rounded-lg bg-stone-800 hover:bg-rose-950 text-stone-400 hover:text-rose-400 transition-colors cursor-pointer"
+                              title="Delete snapshot from vault"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

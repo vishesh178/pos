@@ -122,6 +122,8 @@ app.use((err, req, res, next) => {
   });
 });
 
+const { startBackupScheduler } = require('./src/services/backupScheduler');
+
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Curated Art ERP Server listening on port ${PORT} (0.0.0.0)`);
@@ -136,6 +138,9 @@ if (require.main === module) {
       }
     }
     console.log(`Health endpoint: http://localhost:${PORT}/api/health`);
+    
+    // Start automated daily backup scheduler
+    startBackupScheduler();
   });
 }
 

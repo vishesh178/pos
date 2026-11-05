@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
-const { encrypt, decrypt } = require('../src/utils/crypto');
+const { encrypt, decrypt, encryptBuffer, decryptBuffer } = require('../src/utils/crypto');
 const { generateToken } = require('../src/middleware/auth');
 const jwt = require('jsonwebtoken');
 
@@ -13,6 +13,17 @@ test('Crypto utility encrypts and decrypts with AES-256-GCM', () => {
 
   const decrypted = decrypt(encrypted);
   assert.equal(decrypted, secret);
+});
+
+test('Crypto utility encrypts and decrypts binary SQLite buffers', () => {
+  const dummyDbBuffer = Buffer.from('SQLite format 3\0\x10\x00\x01\x01\x00@  \x00\x00\x00\x01', 'utf8');
+  const encryptedBuffer = encryptBuffer(dummyDbBuffer);
+  assert.ok(encryptedBuffer);
+  assert.ok(encryptedBuffer.length > dummyDbBuffer.length);
+  assert.notDeepEqual(encryptedBuffer, dummyDbBuffer);
+
+  const decryptedBuffer = decryptBuffer(encryptedBuffer);
+  assert.deepEqual(decryptedBuffer, dummyDbBuffer);
 });
 
 test('JWT authentication generates verifiable token with user payload', () => {
