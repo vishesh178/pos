@@ -15,6 +15,7 @@ import {
   Check,
   MessageCircle,
   Upload,
+  Download,
   MapPin,
   ChevronLeft,
   ChevronRight,
@@ -293,13 +294,22 @@ export default function CustomersPage() {
 
         {hasPermission(['ADMIN', 'MANAGER', 'BILLING']) && (
           <div className="self-start sm:self-auto flex items-center gap-2">
+            <a
+              href={`/api/export/customers?token=${encodeURIComponent(token)}&format=xlsx`}
+              download
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-200 hover:text-amber-400 text-xs font-semibold transition-all shadow-sm cursor-pointer"
+              title="Export all customers to Excel (.xlsx)"
+            >
+              <Download className="w-3.5 h-3.5 text-amber-500" />
+              <span>Export</span>
+            </a>
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-200 hover:text-amber-400 text-xs font-semibold transition-all shadow-sm cursor-pointer"
               title="Import Customers from Excel (.xlsx)"
             >
               <Upload className="w-3.5 h-3.5 text-amber-500" />
-              <span>Import Excel</span>
+              <span>Import</span>
             </button>
             <button
               onClick={handleOpenAdd}

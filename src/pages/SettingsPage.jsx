@@ -18,6 +18,12 @@ import {
   ShieldCheck,
   Clock,
   Upload,
+  FileSpreadsheet,
+  Package,
+  Truck,
+  Receipt,
+  Boxes,
+  Tag,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -326,6 +332,18 @@ export default function SettingsPage() {
             >
               <Database className="w-4 h-4" />
               <span>Database Backup & Restore</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('export')}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-colors ${
+                activeTab === 'export'
+                  ? 'bg-amber-500 text-stone-950'
+                  : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900'
+              }`}
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>Data Export & Migration</span>
             </button>
           </>
         )}
@@ -750,6 +768,260 @@ export default function SettingsPage() {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: DATA EXPORT & FULL MIGRATION */}
+      {activeTab === 'export' && hasPermission('ADMIN') && (
+        <div className="space-y-6">
+          {/* Master 1-Click All-in-One Export Hero */}
+          <div className="p-6 bg-stone-900/90 border border-amber-500/40 rounded-2xl shadow-xl backdrop-blur-md">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[10px] font-bold uppercase tracking-wider">
+                    Full ERP Data Migration
+                  </span>
+                  <span className="text-xs text-stone-400">• Multi-Tab Excel Workbook (.xlsx)</span>
+                </div>
+                <h3 className="font-serif font-bold text-lg text-stone-100 flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-amber-500" />
+                  <span>Master All-in-One Business Data Export</span>
+                </h3>
+                <p className="text-xs text-stone-400 leading-relaxed">
+                  Download 100% of your business data formatted into an editable Microsoft Excel (.xlsx) workbook with separate sheets for <strong>Customers</strong>, <strong>Products Catalog</strong>, <strong>Suppliers</strong>, <strong>Sales Invoices</strong>, <strong>Purchase Bills</strong>, <strong>Stock Ledger</strong>, <strong>Expenses</strong>, and <strong>Pricebooks</strong>. Perfect for complete migrations, offline accounting, or tax filing.
+                </p>
+              </div>
+
+              <div className="shrink-0">
+                <a
+                  href={`/api/export/all?token=${encodeURIComponent(token)}`}
+                  download
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs shadow-lg shadow-amber-950/50 transition-all cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Download Complete Master (.xlsx)</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          {/* Module-by-Module Selective Exports Grid */}
+          <div className="space-y-3">
+            <div>
+              <h4 className="font-serif font-bold text-base text-stone-100">
+                Individual Module Exports (Excel & CSV)
+              </h4>
+              <p className="text-xs text-stone-400">
+                Download any specific dataset individually for easy spreadsheet editing or importing into external accounting software.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Card 1: Customers */}
+              <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-stone-100 font-semibold text-sm">
+                    <Users className="w-4 h-4 text-amber-500" />
+                    <span>Customers & Debtors</span>
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    Names, mobile numbers, addresses, GSTIN, PAN, state codes, and current ledger balances.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
+                  <a
+                    href={`/api/export/customers?token=${encodeURIComponent(token)}&format=xlsx`}
+                    download
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    Excel (.xlsx)
+                  </a>
+                  <a
+                    href={`/api/export/customers?token=${encodeURIComponent(token)}&format=csv`}
+                    download
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    CSV
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 2: Products */}
+              <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-stone-100 font-semibold text-sm">
+                    <Package className="w-4 h-4 text-amber-500" />
+                    <span>Products & Art Catalog</span>
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    Art piece titles, SKU, barcodes, categories, HSN codes, purchase cost, selling price, MRP, and stock.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
+                  <a
+                    href={`/api/export/products?token=${encodeURIComponent(token)}&format=xlsx`}
+                    download
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    Excel (.xlsx)
+                  </a>
+                  <a
+                    href={`/api/export/products?token=${encodeURIComponent(token)}&format=csv`}
+                    download
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    CSV
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 3: Suppliers */}
+              <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-stone-100 font-semibold text-sm">
+                    <Truck className="w-4 h-4 text-amber-500" />
+                    <span>Suppliers & Vendors</span>
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    Supplier contact directory, Moradabad/Khambhat addresses, GST numbers, and payable balances.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
+                  <a
+                    href={`/api/export/suppliers?token=${encodeURIComponent(token)}&format=xlsx`}
+                    download
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    Excel (.xlsx)
+                  </a>
+                  <a
+                    href={`/api/export/suppliers?token=${encodeURIComponent(token)}&format=csv`}
+                    download
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    CSV
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 4: Sales Invoices */}
+              <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-stone-100 font-semibold text-sm">
+                    <Receipt className="w-4 h-4 text-amber-500" />
+                    <span>Sales Invoices</span>
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    Complete invoice history, taxable values, CGST/SGST/IGST breakdown, payment modes, and grand totals.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
+                  <a
+                    href={`/api/export/invoices?token=${encodeURIComponent(token)}&format=xlsx`}
+                    download
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    Excel (.xlsx)
+                  </a>
+                  <a
+                    href={`/api/export/invoices?token=${encodeURIComponent(token)}&format=csv`}
+                    download
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    CSV
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 5: Inward Purchase Bills */}
+              <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-stone-100 font-semibold text-sm">
+                    <FileSpreadsheet className="w-4 h-4 text-amber-500" />
+                    <span>Purchase Bills</span>
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    Vendor inward invoices, bill dates, taxes, paid amounts, and payment status.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
+                  <a
+                    href={`/api/export/purchases?token=${encodeURIComponent(token)}&format=xlsx`}
+                    download
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    Excel (.xlsx)
+                  </a>
+                  <a
+                    href={`/api/export/purchases?token=${encodeURIComponent(token)}&format=csv`}
+                    download
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    CSV
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 6: Stock Movements Ledger */}
+              <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-stone-100 font-semibold text-sm">
+                    <Boxes className="w-4 h-4 text-amber-500" />
+                    <span>Inventory & Stock Ledger</span>
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    Timestamped audit ledger of every inventory change (Sales, Purchases, Returns, Adjustments).
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
+                  <a
+                    href={`/api/export/inventory?token=${encodeURIComponent(token)}&format=xlsx`}
+                    download
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    Excel (.xlsx)
+                  </a>
+                  <a
+                    href={`/api/export/inventory?token=${encodeURIComponent(token)}&format=csv`}
+                    download
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    CSV
+                  </a>
+                </div>
+              </div>
+
+              {/* Card 7: Operating Expenses */}
+              <div className="p-4 bg-stone-900 border border-stone-800 rounded-2xl flex flex-col justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-stone-100 font-semibold text-sm">
+                    <Tag className="w-4 h-4 text-amber-500" />
+                    <span>Showroom Expenses</span>
+                  </div>
+                  <p className="text-[11px] text-stone-400">
+                    Rent, electricity, staff salaries, packaging, freight, and showroom maintenance entries.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
+                  <a
+                    href={`/api/export/expenses?token=${encodeURIComponent(token)}&format=xlsx`}
+                    download
+                    className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    Excel (.xlsx)
+                  </a>
+                  <a
+                    href={`/api/export/expenses?token=${encodeURIComponent(token)}&format=csv`}
+                    download
+                    className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors"
+                  >
+                    CSV
+                  </a>
+                </div>
+              </div>
             </div>
           </div>
         </div>

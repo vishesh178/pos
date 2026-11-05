@@ -16,6 +16,7 @@ const reportsRoutes = require('./src/routes/reports.routes');
 const backupRoutes = require('./src/routes/backup.routes');
 const estimatesRoutes = require('./src/routes/estimates.routes');
 const pricebooksRoutes = require('./src/routes/pricebooks.routes');
+const exportRoutes = require('./src/routes/export.routes');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -85,6 +86,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/estimates', estimatesRoutes);
 app.use('/api/pricebooks', pricebooksRoutes);
+app.use('/api/export', exportRoutes);
 
 // Serve static client build if available
 const distPath = path.resolve(__dirname, '../dist');

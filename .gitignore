@@ -19,6 +19,10 @@ database/*.db
 database/*.db-journal
 *.db
 *.db-journal
+*.sqlite
+*.sqlite.enc
+server/database/backups/*
+!server/database/backups/.gitkeep
 
 # Build outputs
 dist/
