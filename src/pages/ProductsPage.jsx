@@ -40,12 +40,44 @@ export default function ProductsPage() {
   // Direct Photo Capture State
   const [uploadingProductId, setUploadingProductId] = useState(null);
 
-  // Modals state
+  // Modals & Selection state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isBarcodeModalOpen, setIsBarcodeModalOpen] = useState(false);
   const [barcodeProduct, setBarcodeProduct] = useState(null);
+  const [barcodeProductsList, setBarcodeProductsList] = useState([]);
+  const [selectedProductIds, setSelectedProductIds] = useState(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  const toggleSelectProduct = (id) => {
+    setSelectedProductIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (products.length > 0 && selectedProductIds.size === products.length) {
+      setSelectedProductIds(new Set());
+    } else {
+      setSelectedProductIds(new Set(products.map((p) => p.id)));
+    }
+  };
+
+  const handleOpenBatchBarcodes = () => {
+    if (selectedProductIds.size > 0) {
+      const selected = products.filter((p) => selectedProductIds.has(p.id));
+      setBarcodeProduct(null);
+      setBarcodeProductsList(selected);
+      setIsBarcodeModalOpen(true);
+    } else {
+      setBarcodeProduct(null);
+      setBarcodeProductsList(products);
+      setIsBarcodeModalOpen(true);
+    }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -103,6 +135,7 @@ export default function ProductsPage() {
 
   const handleOpenBarcode = (product) => {
     setBarcodeProduct(product);
+    setBarcodeProductsList([product]);
     setIsBarcodeModalOpen(true);
   };
 
@@ -186,6 +219,19 @@ export default function ProductsPage() {
               <span>Add Art Piece</span>
             </button>
           )}
+
+          <button
+            onClick={handleOpenBatchBarcodes}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+              selectedProductIds.size > 0
+                ? 'bg-amber-500/20 border-amber-500 text-amber-300 shadow-sm shadow-amber-950/40'
+                : 'bg-stone-900 border-stone-800 text-stone-300 hover:text-amber-400 hover:border-stone-700'
+            }`}
+            title="Generate Barcode Labels / Sticker Sheets"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Labels {selectedProductIds.size > 0 ? `(${selectedProductIds.size})` : ''}</span>
+          </button>
 
           <button
             onClick={() => navigate('/wholesale-catalog')}
@@ -287,9 +333,20 @@ export default function ProductsPage() {
             return (
               <div
                 key={p.id}
-                className="p-3.5 bg-stone-900 border border-stone-800 rounded-2xl shadow-lg space-y-3"
+                className={`p-3.5 bg-stone-900 border rounded-2xl shadow-lg space-y-3 transition-colors ${
+                  selectedProductIds.has(p.id) ? 'border-amber-500/60 bg-amber-950/10' : 'border-stone-800'
+                }`}
               >
                 <div className="flex items-start gap-3">
+                  {/* Select Checkbox */}
+                  <div className="pt-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedProductIds.has(p.id)}
+                      onChange={() => toggleSelectProduct(p.id)}
+                      className="w-4 h-4 rounded text-amber-500 bg-stone-950 border-stone-700 cursor-pointer"
+                    />
+                  </div>
                   {/* Product Image Thumbnail with Direct Camera Snap */}
                   <div className="relative w-20 h-20 rounded-xl overflow-hidden bg-stone-950 border border-stone-800 shrink-0 flex items-center justify-center">
                     {isUploadingThis ? (
@@ -435,6 +492,15 @@ export default function ProductsPage() {
           <table className="w-full text-left text-xs">
             <thead className="bg-stone-900 border-b border-stone-800 text-[10px] uppercase font-bold text-stone-400 tracking-wider">
               <tr>
+                <th className="w-10 px-4 py-3.5 text-center">
+                  <input
+                    type="checkbox"
+                    checked={products.length > 0 && selectedProductIds.size === products.length}
+                    onChange={toggleSelectAll}
+                    className="w-3.5 h-3.5 rounded text-amber-500 bg-stone-950 border-stone-700 cursor-pointer"
+                    title="Select All"
+                  />
+                </th>
                 <th className="px-5 py-3.5">Product Title & Category</th>
                 <th className="px-4 py-3.5">SKU & Barcode</th>
                 {isAdmin && <th className="px-4 py-3.5 text-right">Purchase Cost</th>}
@@ -449,13 +515,13 @@ export default function ProductsPage() {
             <tbody className="divide-y divide-stone-800/80 text-stone-300">
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className="text-center py-12 text-stone-400 font-serif">
+                  <td colSpan={isAdmin ? 10 : 9} className="text-center py-12 text-stone-400 font-serif">
                     Loading showroom products...
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className="text-center py-12 text-stone-400">
+                  <td colSpan={isAdmin ? 10 : 9} className="text-center py-12 text-stone-400">
                     No décor products found matching your filters.
                   </td>
                 </tr>
@@ -463,8 +529,20 @@ export default function ProductsPage() {
                 products.map((p) => {
                   const isLowStock = p.currentStock <= p.minStock;
                   const isUploadingThis = uploadingProductId === p.id;
+                  const isSelected = selectedProductIds.has(p.id);
                   return (
-                    <tr key={p.id} className="hover:bg-stone-800/40 transition-colors">
+                    <tr
+                      key={p.id}
+                      className={`hover:bg-stone-800/40 transition-colors ${isSelected ? 'bg-amber-950/10' : ''}`}
+                    >
+                      <td className="w-10 px-4 py-3.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelectProduct(p.id)}
+                          className="w-3.5 h-3.5 rounded text-amber-500 bg-stone-950 border-stone-700 cursor-pointer"
+                        />
+                      </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           {/* Image with quick camera upload */}
@@ -620,8 +698,13 @@ export default function ProductsPage() {
 
       <BarcodePrintModal
         isOpen={isBarcodeModalOpen}
-        onClose={() => setIsBarcodeModalOpen(false)}
+        onClose={() => {
+          setIsBarcodeModalOpen(false);
+          setBarcodeProduct(null);
+          setBarcodeProductsList([]);
+        }}
         product={barcodeProduct}
+        products={barcodeProductsList}
       />
 
       <ImportModal

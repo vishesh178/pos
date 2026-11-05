@@ -45,6 +45,7 @@ server/uploads/*
 .idea/
 .vscode/
 graphify-out/
+.mcp.json
 *.suo
 *.ntvs*
 *.njsproj
