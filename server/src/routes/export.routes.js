@@ -264,10 +264,7 @@ router.get('/customers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BI
       prisma.generalAccount.findMany({ orderBy: { name: 'asc' } }),
     ]);
 
-    const companyName =
-      bp?.businessName && bp.businessName !== 'Curated Art'
-        ? bp.businessName
-        : 'GOKUL TRADERS';
+    const companyName = bp?.businessName ? bp.businessName.toUpperCase() : 'CURATED ART';
     const address =
       bp?.address && !bp.address.includes('Showroom #104')
         ? bp.address
@@ -410,7 +407,7 @@ router.get('/customers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BI
       format,
     });
 
-    sendSpreadsheet(res, wb, 'GOKUL_TRADERS-Account_List', format);
+    sendSpreadsheet(res, wb, 'CURATED_ART-Account_List', format);
   } catch (err) {
     console.error('Export customers error:', err);
     res.status(500).json({ error: 'Failed to export accounts: ' + err.message });

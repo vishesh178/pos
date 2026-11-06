@@ -836,14 +836,14 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-2 pt-2 border-t border-stone-800/80">
                   <button
                     type="button"
-                    onClick={() => downloadExportFile('/api/export/customers?format=xlsx', 'GOKUL_TRADERS-Account_List.xlsx', token)}
+                    onClick={() => downloadExportFile('/api/export/customers?format=xlsx', 'CURATED_ART-Account_List.xlsx', token)}
                     className="flex-1 py-1.5 px-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     Excel (.xlsx)
                   </button>
                   <button
                     type="button"
-                    onClick={() => downloadExportFile('/api/export/customers?format=csv', 'GOKUL_TRADERS-Account_List.csv', token)}
+                    onClick={() => downloadExportFile('/api/export/customers?format=csv', 'CURATED_ART-Account_List.csv', token)}
                     className="py-1.5 px-2.5 rounded-lg bg-stone-950 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-stone-200 text-xs font-semibold text-center transition-colors cursor-pointer"
                   >
                     CSV

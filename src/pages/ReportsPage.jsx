@@ -1233,7 +1233,7 @@ export default function ReportsPage() {
                 onClick={async () => {
                   await downloadExportFile(
                     '/api/export/customers?format=xlsx',
-                    'GOKUL_TRADERS-Account_List.xlsx',
+                    'CURATED_ART-Account_List.xlsx',
                     token
                   );
                 }}
@@ -1248,7 +1248,7 @@ export default function ReportsPage() {
                 onClick={async () => {
                   await downloadExportFile(
                     '/api/export/customers?format=csv',
-                    'GOKUL_TRADERS-Account_List.csv',
+                    'CURATED_ART-Account_List.csv',
                     token
                   );
                 }}

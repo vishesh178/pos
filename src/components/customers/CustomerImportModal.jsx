@@ -597,7 +597,7 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
                 </span>
               </h3>
               <p className="text-[11px] text-stone-400">
-                Automatically routes Gokul Traders ledger sections: Creditors &rarr; Suppliers, Debtors &rarr; Customers (Retail, Wholesale, Architect), and safely excludes general ledger accounts.
+                Automatically routes Curated Art ledger sections: Creditors &rarr; Suppliers, Debtors &rarr; Customers (Retail, Wholesale, Architect), and safely stores general ledger accounts in Chart of Accounts.
               </p>
             </div>
           </div>
@@ -649,7 +649,7 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
                 Click to select your Account Master <span className="text-amber-400 font-mono">.xlsx</span> file
               </p>
               <p className="text-[11px] text-stone-500 mt-1 max-w-lg">
-                Upload your Gokul Traders account list. The parser dynamically reads section headers (Sundry Creditors, Retailers, Wholesalers, Architects, Loans) and routes each entity to its proper directory.
+                Upload your Curated Art / Master account list. The parser dynamically reads section headers (Sundry Creditors, Retailers, Wholesalers, Architects, Loans, Bank, Cash, Expenses) and routes each entity to its proper directory.
               </p>
               <input
                 type="file"

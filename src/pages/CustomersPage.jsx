@@ -301,7 +301,7 @@ export default function CustomersPage() {
                 setIsExporting(true);
                 await downloadExportFile(
                   '/api/export/customers?format=xlsx',
-                  'GOKUL_TRADERS-Account_List.xlsx',
+                  'CURATED_ART-Account_List.xlsx',
                   token
                 );
                 setIsExporting(false);
@@ -318,7 +318,7 @@ export default function CustomersPage() {
                 setIsExporting(true);
                 await downloadExportFile(
                   '/api/export/customers?format=csv',
-                  'GOKUL_TRADERS-Account_List.csv',
+                  'CURATED_ART-Account_List.csv',
                   token
                 );
                 setIsExporting(false);
@@ -1276,7 +1276,7 @@ export default function CustomersPage() {
         onBalanceUpdated={fetchCustomers}
       />
 
-      {/* Customer / Account Bulk Import Modal (Excel, TSV, CSV & Gokul Traders) */}
+      {/* Customer / Account Bulk Import Modal (Excel, TSV, CSV & Curated Art Master) */}
       <CustomerImportModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}

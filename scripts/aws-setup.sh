@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AWS EC2 Free Tier Ubuntu Deployment Script for Curated Art / Gokul Traders POS
+# AWS EC2 Free Tier Ubuntu Deployment Script for Curated Art POS & ERP
 # ==============================================================================
 set -e
 
@@ -69,3 +69,4 @@ sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u $USER --hp $HOME || true
 
 echo "=== Deployment Complete! ==="
 echo "Access your ERP/POS at: http://$(curl -s http://checkip.amazonaws.com || curl -s ifconfig.me)"
+
