@@ -164,8 +164,63 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Expenses Table */}
-      <div className="bg-stone-900 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
+      {/* MOBILE EXPENSE CARDS (< 768px, zero horizontal scrolling) */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="p-8 text-center text-stone-400 bg-stone-900 border border-stone-800 rounded-2xl">
+            <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <p className="text-xs">Loading expenses...</p>
+          </div>
+        ) : expenses.length === 0 ? (
+          <div className="p-8 text-center text-stone-400 bg-stone-900 border border-stone-800 rounded-2xl text-xs">
+            No expense records found.
+          </div>
+        ) : (
+          expenses.map((e) => (
+            <div
+              key={e.id}
+              className="p-4 bg-stone-900 border border-stone-800 rounded-2xl shadow space-y-2.5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-800 text-amber-400 font-semibold uppercase tracking-wider">
+                    {e.category}
+                  </span>
+                  <h4 className="font-serif font-bold text-sm text-stone-100 mt-1">{e.title}</h4>
+                </div>
+                <div className="text-right">
+                  <span className="font-mono font-bold text-base text-rose-400">
+                    ₹{e.amount.toFixed(2)}
+                  </span>
+                  <p className="text-[10px] text-stone-500 uppercase">{e.paymentMethod}</p>
+                </div>
+              </div>
+
+              {e.description && (
+                <p className="text-xs text-stone-400 bg-stone-950 p-2 rounded-xl border border-stone-850">
+                  {e.description}
+                </p>
+              )}
+
+              <div className="flex items-center justify-between pt-1 border-t border-stone-800/60 text-[11px] text-stone-500">
+                <span className="font-mono">{new Date(e.expenseDate).toLocaleDateString('en-IN')}</span>
+                {hasPermission('ADMIN') && (
+                  <button
+                    onClick={() => handleDelete(e.id)}
+                    className="p-1.5 text-stone-400 hover:text-rose-400 hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
+                    title="Delete Expense"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= 768px) */}
+      <div className="hidden md:block bg-stone-900 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead className="bg-stone-900 border-b border-stone-800 text-[10px] uppercase font-bold text-stone-400">

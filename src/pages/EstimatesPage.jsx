@@ -239,7 +239,7 @@ export default function EstimatesPage() {
           />
         </div>
 
-        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
           {['all', 'PENDING', 'CONVERTED', 'CANCELLED'].map((st) => (
             <button
               key={st}
@@ -256,8 +256,132 @@ export default function EstimatesPage() {
         </div>
       </div>
 
-      {/* Estimates Table */}
-      <div className="bg-stone-900 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
+      {/* MOBILE ESTIMATE CARDS (< 768px, zero horizontal scrolling) */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="p-8 text-center text-stone-400 bg-stone-900 border border-stone-800 rounded-2xl">
+            <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <p className="text-xs">Loading quotations...</p>
+          </div>
+        ) : estimates.length === 0 ? (
+          <div className="p-8 text-center text-stone-500 bg-stone-900 border border-stone-800 rounded-2xl">
+            <FileText className="w-8 h-8 text-stone-600 mx-auto mb-2" />
+            <p className="font-semibold text-stone-300">No estimates found</p>
+            <p className="text-xs text-stone-500 mt-1">
+              Go to POS Desk and click "Save as Estimate" to create one.
+            </p>
+          </div>
+        ) : (
+          estimates.map((est) => (
+            <div
+              key={est.id}
+              className="p-4 bg-stone-900 border border-stone-800 rounded-2xl shadow-lg space-y-3"
+            >
+              {/* Header: Estimate #, Date, Status */}
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold text-amber-400 text-sm">
+                      {est.estimateNumber}
+                    </span>
+                    <span
+                      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        est.status === 'CONVERTED'
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          : est.status === 'CANCELLED'
+                          ? 'bg-rose-950 text-rose-400 border border-rose-800'
+                          : 'bg-amber-950 text-amber-400 border border-amber-800'
+                      }`}
+                    >
+                      {est.status}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-stone-500 mt-0.5">
+                    {new Date(est.createdAt).toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </p>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-[10px] text-stone-400 uppercase tracking-wider">Grand Total</span>
+                  <p className="font-mono font-bold text-base text-stone-100">
+                    ₹{est.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Customer & Item details box */}
+              <div className="p-2.5 rounded-xl bg-stone-950 border border-stone-800/80 flex items-center justify-between text-xs">
+                <div className="min-w-0 pr-2">
+                  <p className="font-semibold text-stone-200 truncate">
+                    {est.customerName || 'Walk-in Retail Customer'}
+                  </p>
+                  {est.customerMobile && (
+                    <p className="text-[11px] text-stone-400 font-mono">{est.customerMobile}</p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="px-2 py-0.5 rounded bg-stone-800 text-stone-300 text-[11px] font-mono">
+                    {est.items?.length || 0} {est.items?.length === 1 ? 'item' : 'items'}
+                  </span>
+                  <p className="text-[10px] text-stone-500 font-mono mt-0.5">
+                    Taxable ₹{est.subtotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleOpenEstimateModal(est)}
+                  className="flex-1 py-2 px-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5 text-amber-400" />
+                  <span>View / Print</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleQuickWhatsApp(est)}
+                  className="p-2 rounded-xl bg-emerald-950/70 border border-emerald-800 text-emerald-400 hover:bg-emerald-900 transition-colors cursor-pointer"
+                  title="WhatsApp Share"
+                >
+                  <Share2 className="w-4 h-4" />
+                </button>
+
+                {est.status !== 'CONVERTED' && (
+                  <button
+                    type="button"
+                    onClick={() => handleOpenInPOS(est)}
+                    className="py-2 px-3 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 hover:bg-amber-500 hover:text-stone-950 text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span>Bill in POS</span>
+                  </button>
+                )}
+
+                {est.status !== 'CONVERTED' && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteEstimate(est)}
+                    className="p-2 rounded-xl text-stone-500 hover:text-rose-400 hover:bg-stone-800 transition-colors cursor-pointer"
+                    title="Delete Estimate"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* DESKTOP TABLE VIEW (>= 768px) */}
+      <div className="hidden md:block bg-stone-900 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs text-stone-300">
             <thead className="bg-stone-950/80 text-[10px] uppercase tracking-wider text-stone-400 border-b border-stone-800">

@@ -247,8 +247,121 @@ export default function InvoicesPage() {
             <p className="text-xs text-stone-500">Try adjusting your search query or status filter.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
+          <>
+            {/* MOBILE INVOICE CARDS (< 768px, zero horizontal scrolling) */}
+            <div className="md:hidden p-3 space-y-3">
+              {filteredInvoices.map((inv) => {
+                const itemCount = (inv.items || []).reduce((sum, it) => sum + (it.quantity || 0), 0);
+                const isReturned = inv.status === 'RETURNED' || (inv.salesReturns && inv.salesReturns.length > 0);
+
+                return (
+                  <div
+                    key={inv.id}
+                    className="p-4 bg-stone-950/80 border border-stone-800/80 rounded-2xl shadow space-y-3"
+                  >
+                    {/* Header: Invoice #, Date, Status */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-amber-400 text-sm">
+                            {inv.invoiceNumber}
+                          </span>
+                          <span
+                            className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${
+                              inv.paymentStatus === 'PAID'
+                                ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80'
+                                : inv.paymentStatus === 'PARTIAL'
+                                ? 'bg-amber-950/80 text-amber-400 border border-amber-800/80'
+                                : 'bg-rose-950/80 text-rose-400 border border-rose-800/80'
+                            }`}
+                          >
+                            {inv.paymentStatus}
+                          </span>
+                          {isReturned && (
+                            <span className="text-[10px] text-amber-400 font-semibold px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-800/60">
+                              Returned
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-stone-500 font-mono mt-0.5">
+                          {new Date(inv.createdAt).toLocaleDateString('en-IN', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                          })}{' '}
+                          •{' '}
+                          {new Date(inv.createdAt).toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] text-stone-400 uppercase tracking-wider">Total</span>
+                        <p className="font-mono font-bold text-base text-stone-100">
+                          ₹{(inv.grandTotal || 0).toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Customer & Item details box */}
+                    <div className="p-2.5 rounded-xl bg-stone-900 border border-stone-800 flex items-center justify-between text-xs">
+                      <div className="min-w-0 pr-2">
+                        <p className="font-semibold text-stone-200 truncate">
+                          {inv.customerName || 'Walk-in Retail Customer'}
+                        </p>
+                        {inv.customerMobile && (
+                          <p className="text-[11px] text-stone-400 font-mono">{inv.customerMobile}</p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="px-2 py-0.5 rounded bg-stone-800 text-stone-300 text-[11px] font-mono">
+                          {itemCount} {itemCount === 1 ? 'item' : 'items'}
+                        </span>
+                        <p className="text-[10px] text-stone-500 font-mono mt-0.5">
+                          {inv.paymentMethod}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedInvoice(inv)}
+                        className="flex-1 py-2 px-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>View Receipt</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => navigate('/returns')}
+                        className="py-2 px-3 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-emerald-400 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Return</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setInvoiceToDelete(inv)}
+                        className="p-2 rounded-xl text-stone-500 hover:text-rose-400 hover:bg-stone-800 transition-colors cursor-pointer"
+                        title="Delete Invoice"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* DESKTOP TABLE VIEW (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-stone-800 bg-stone-950/60 text-stone-400 text-[11px] uppercase tracking-wider font-semibold">
                   <th className="py-3 px-4">Invoice #</th>
@@ -380,6 +493,7 @@ export default function InvoicesPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 

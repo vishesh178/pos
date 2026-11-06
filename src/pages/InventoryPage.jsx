@@ -231,8 +231,61 @@ export default function InventoryPage() {
         </div>
       </div>
 
+      {/* MOBILE MOVEMENT CARDS (< 768px, zero horizontal scrolling) */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <div className="p-8 text-center text-stone-400 bg-stone-900 border border-stone-800 rounded-2xl">
+            <div className="w-6 h-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+            <p className="text-xs">Loading stock ledger...</p>
+          </div>
+        ) : movements.length === 0 ? (
+          <div className="p-8 text-center text-stone-400 bg-stone-900 border border-stone-800 rounded-2xl text-xs">
+            No movements recorded yet.
+          </div>
+        ) : (
+          movements.map((m) => (
+            <div
+              key={m.id}
+              className="p-4 bg-stone-900 border border-stone-800 rounded-2xl shadow space-y-2.5"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h4 className="font-semibold text-sm text-stone-100">{m.product?.name}</h4>
+                  <p className="font-mono text-[10px] text-amber-500 mt-0.5">{m.product?.sku}</p>
+                </div>
+                <div className="text-right">
+                  <span className={`font-mono font-bold text-base ${m.quantity > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {m.quantity > 0 ? `+${m.quantity}` : m.quantity}
+                  </span>
+                  <p className="text-[10px] text-stone-400 font-mono">Bal: {m.balanceAfter}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-2 rounded-xl bg-stone-950 border border-stone-800/80 text-xs">
+                <div>{getMovementBadge(m.type)}</div>
+                <span className="text-stone-400 text-[11px] truncate max-w-[180px]">
+                  {m.notes || m.referenceType || '—'}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pt-1 border-t border-stone-800/60 text-[11px] text-stone-500">
+                <span className="font-mono">
+                  {new Date(m.createdAt).toLocaleString('en-IN', {
+                    day: '2-digit',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </span>
+                <span>By {m.createdBy || 'System'}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
       {/* Movement Ledger Table */}
-      <div className="bg-stone-900/90 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
+      <div className="hidden md:block bg-stone-900/90 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between">
           <h3 className="font-serif font-bold text-sm text-stone-100">Immutable Stock Movement Ledger</h3>
           <span className="text-xs text-stone-400">Showing last {movements.length} transactions</span>
