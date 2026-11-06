@@ -9,6 +9,7 @@ import ProductsPage from './pages/ProductsPage';
 import InventoryPage from './pages/InventoryPage';
 import POSPage from './pages/POSPage';
 import EstimatesPage from './pages/EstimatesPage';
+import InvoicesPage from './pages/InvoicesPage';
 import SalesReturnsPage from './pages/SalesReturnsPage';
 import CustomersPage from './pages/CustomersPage';
 import PurchasesPage from './pages/PurchasesPage';
@@ -66,6 +67,7 @@ export default function App() {
               >
                 <Route index element={<DashboardPage />} />
                 <Route path="pos" element={<POSPage />} />
+                <Route path="invoices" element={<InvoicesPage />} />
                 <Route path="estimates" element={<EstimatesPage />} />
                 <Route path="products" element={<ProductsPage />} />
                 <Route path="wholesale-catalog" element={<WholesaleCatalogPage />} />

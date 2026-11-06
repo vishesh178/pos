@@ -16,6 +16,7 @@ import {
   Sparkles,
   X,
   FileText,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -118,6 +119,7 @@ export default function Sidebar({ isOpenMobile, onCloseMobile }) {
   const navItems = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['ADMIN', 'MANAGER', 'BILLING', 'INVENTORY'] },
     { name: 'POS Billing', path: '/pos', icon: ShoppingBag, roles: ['ADMIN', 'MANAGER', 'BILLING'] },
+    { name: 'Invoices Register', path: '/invoices', icon: Receipt, roles: ['ADMIN', 'MANAGER', 'BILLING'] },
     { name: 'Estimates & Quotes', path: '/estimates', icon: FileText, roles: ['ADMIN', 'MANAGER', 'BILLING'] },
     { name: 'Products Catalog', path: '/products', icon: Package, roles: ['ADMIN', 'MANAGER', 'INVENTORY'] },
     { name: 'Wholesale Catalog', path: '/wholesale-catalog', icon: BookOpen, roles: ['ADMIN', 'MANAGER', 'BILLING', 'INVENTORY'] },
@@ -125,7 +127,7 @@ export default function Sidebar({ isOpenMobile, onCloseMobile }) {
     { name: 'Purchases & Bills', path: '/purchases', icon: Truck, roles: ['ADMIN', 'MANAGER', 'INVENTORY'] },
     { name: 'Customer Directory', path: '/customers', icon: Users, roles: ['ADMIN', 'MANAGER', 'BILLING'] },
     { name: 'Sales Returns', path: '/returns', icon: RotateCcw, roles: ['ADMIN', 'MANAGER', 'BILLING'] },
-    { name: 'Expense Tracker', path: '/expenses', icon: Receipt, roles: ['ADMIN', 'MANAGER'] },
+    { name: 'Expense Tracker', path: '/expenses', icon: Wallet, roles: ['ADMIN', 'MANAGER'] },
     { name: 'Financial & GST', path: '/reports', icon: BarChart3, roles: ['ADMIN', 'MANAGER'] },
     { name: 'System Settings', path: '/settings', icon: Settings, roles: ['ADMIN'] },
   ];

@@ -30,6 +30,8 @@ export default function Header({ onOpenMobileMenu }) {
   const routeTitles = {
     '/': 'Executive Showroom Dashboard',
     '/pos': 'High-Speed POS & Billing Desk',
+    '/invoices': 'Tax Invoices & Billing Register',
+    '/estimates': 'Quotations & Commercial Estimates',
     '/products': 'Curated Home Décor Catalog',
     '/inventory': 'Real-Time Inventory & Movement Ledger',
     '/purchases': 'Supplier Inward & Purchase Orders',
@@ -44,6 +46,8 @@ export default function Header({ onOpenMobileMenu }) {
   const mobileRouteTitles = {
     '/': 'Dashboard',
     '/pos': 'POS Desk',
+    '/invoices': 'Invoices',
+    '/estimates': 'Estimates',
     '/products': 'Catalog',
     '/inventory': 'Inventory',
     '/purchases': 'Purchases',

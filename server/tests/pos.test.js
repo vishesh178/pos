@@ -316,3 +316,125 @@ test('Strict Return Quantity Limits - strictly prevents duplicate and excess ret
     await prisma.product.delete({ where: { id: product.id } });
   }
 });
+
+test('DELETE /api/pos/invoices/:id - permanently deletes invoice, restores stock, and rolls back sequence for most recent bill', async () => {
+  const posRouter = require('../src/routes/pos.routes');
+  const deleteRoute = posRouter.stack.find((s) => s.route && s.route.path === '/invoices/:id' && s.route.methods.delete);
+  assert.ok(deleteRoute, 'DELETE /invoices/:id route handler must exist');
+  const deleteHandler = deleteRoute.route.stack[deleteRoute.route.stack.length - 1].handle;
+
+  const business = await prisma.businessProfile.findFirst();
+  const originalNextNumber = business.invoiceNextNumber;
+
+  // Create isolated test product
+  const product = await prisma.product.create({
+    data: {
+      name: 'Test Deletion Painting',
+      sku: `PAINT-${Date.now()}`,
+      barcode: `890${Date.now().toString().slice(-10)}`,
+      sellingPrice: 3000,
+      purchasePrice: 1500,
+      mrp: 3500,
+      currentStock: 5,
+    },
+  });
+
+  // Create an invoice simulating the most recent bill
+  const simulatedBillNum = originalNextNumber;
+  const invNumber = `${business.invoicePrefix}${simulatedBillNum}`;
+
+  // Advance business next number to simulatedBillNum + 1 (simulating next bill would be billNum + 1)
+  await prisma.businessProfile.update({
+    where: { id: business.id },
+    data: { invoiceNextNumber: simulatedBillNum + 1 },
+  });
+
+  const invoice = await prisma.invoice.create({
+    data: {
+      invoiceNumber: invNumber,
+      customerName: 'Sequence Rollback Customer',
+      subtotal: 3000,
+      grandTotal: 3000,
+      paidAmount: 3000,
+      balanceAmount: 0,
+      paymentStatus: 'PAID',
+      paymentMethod: 'CASH',
+      items: {
+        create: [
+          {
+            productId: product.id,
+            productName: product.name,
+            sku: product.sku,
+            hsnCode: '9701',
+            quantity: 2,
+            unitPrice: 1500,
+            mrp: 1800,
+            taxRate: 18,
+            taxableAmount: 2542.37,
+            totalAmount: 3000,
+          },
+        ],
+      },
+      payments: {
+        create: [
+          {
+            type: 'RECEIPT',
+            paymentMethod: 'CASH',
+            amount: 3000,
+          },
+        ],
+      },
+    },
+  });
+
+  const callDelete = (id) =>
+    new Promise((resolve) => {
+      let statusCode = 200;
+      const req = {
+        params: { id },
+        user: { name: 'Admin Tester', role: 'ADMIN' },
+        logAudit: () => {},
+      };
+      const res = {
+        status(code) {
+          statusCode = code;
+          return this;
+        },
+        json(data) {
+          resolve({ status: statusCode, body: data });
+        },
+      };
+      deleteHandler(req, res);
+    });
+
+  try {
+    // Current stock is 5.
+    // Deleting the invoice should permanently delete it, restore 2 units to stock (5 + 2 = 7),
+    // and roll back invoiceNextNumber to simulatedBillNum!
+    const delRes = await callDelete(invoice.id);
+    assert.equal(delRes.status, 200);
+    assert.equal(delRes.body.success, true);
+    assert.equal(delRes.body.deletedInvoiceNumber, invNumber);
+    assert.equal(delRes.body.nextInvoiceNumber, simulatedBillNum);
+
+    // Verify invoice is completely deleted
+    const checkInvoice = await prisma.invoice.findUnique({ where: { id: invoice.id } });
+    assert.equal(checkInvoice, null);
+
+    // Verify stock was restored from 5 to 7
+    const checkProduct = await prisma.product.findUnique({ where: { id: product.id } });
+    assert.equal(checkProduct.currentStock, 7);
+
+    // Verify businessProfile next invoice number rolled back to simulatedBillNum!
+    const checkProfile = await prisma.businessProfile.findFirst();
+    assert.equal(checkProfile.invoiceNextNumber, simulatedBillNum);
+  } finally {
+    // Cleanup
+    await prisma.stockMovement.deleteMany({ where: { productId: product.id } });
+    await prisma.product.delete({ where: { id: product.id } }).catch(() => {});
+    await prisma.businessProfile.update({
+      where: { id: business.id },
+      data: { invoiceNextNumber: originalNextNumber },
+    });
+  }
+});

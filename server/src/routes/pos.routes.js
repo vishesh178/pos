@@ -297,14 +297,32 @@ router.post('/checkout', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BI
   }
 });
 
-// GET /api/pos/invoices - Recent invoices
+// GET /api/pos/invoices - Invoices list with search & status filters
 router.get('/invoices', async (req, res) => {
   try {
-    const { limit = 30 } = req.query;
+    const { limit = 100, search, status } = req.query;
+    const where = {};
+
+    if (status && status !== 'ALL') {
+      where.paymentStatus = status;
+    }
+
+    if (search && search.trim()) {
+      const q = search.trim();
+      where.OR = [
+        { invoiceNumber: { contains: q } },
+        { customerName: { contains: q } },
+        { customerMobile: { contains: q } },
+      ];
+    }
+
     const invoices = await prisma.invoice.findMany({
+      where,
       include: {
         items: true,
         payments: true,
+        customer: true,
+        salesReturns: { include: { items: true } },
       },
       orderBy: { createdAt: 'desc' },
       take: parseInt(limit, 10),
@@ -450,6 +468,161 @@ router.get('/invoices/:id', async (req, res) => {
   } catch (err) {
     console.error('Fetch invoice details error:', err);
     res.status(500).json({ error: 'Failed to retrieve invoice.' });
+  }
+});
+
+// DELETE /api/pos/invoices/:id - Permanently delete invoice, restore stock, and roll back next bill sequence if most recent
+router.delete('/invoices/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rawId = (id || '').trim();
+    if (!rawId) {
+      return res.status(400).json({ error: 'Invoice ID is required.' });
+    }
+
+    // 1. Find invoice with all relational records
+    const invoice = await prisma.invoice.findFirst({
+      where: {
+        OR: [{ id: rawId }, { invoiceNumber: rawId }],
+      },
+      include: {
+        items: true,
+        payments: true,
+        salesReturns: { include: { items: true } },
+      },
+    });
+
+    if (!invoice) {
+      return res.status(404).json({ error: `Invoice "${rawId}" not found.` });
+    }
+
+    const business = await prisma.businessProfile.findFirst();
+
+    // 2. Perform deletion and stock/sequence updates inside an atomic transaction
+    const deletionResult = await prisma.$transaction(async (tx) => {
+      // A. Restore inventory for sold items (excluding what was already returned in credit notes)
+      for (const item of invoice.items) {
+        if (item.productId) {
+          const prod = await tx.product.findUnique({ where: { id: item.productId } });
+          if (prod) {
+            const alreadyReturned = (invoice.salesReturns || []).reduce((sum, sr) => {
+              const matched = (sr.items || []).filter((ri) => ri.productId === item.productId);
+              return sum + matched.reduce((s, ri) => s + ri.quantity, 0);
+            }, 0);
+
+            const netUnitsToRestore = Math.max(0, item.quantity - alreadyReturned);
+            if (netUnitsToRestore > 0) {
+              const newStock = prod.currentStock + netUnitsToRestore;
+              await tx.product.update({
+                where: { id: item.productId },
+                data: { currentStock: newStock },
+              });
+
+              await tx.stockMovement.create({
+                data: {
+                  productId: item.productId,
+                  type: 'ADJUSTMENT_INWARD',
+                  quantity: netUnitsToRestore,
+                  unitCost: prod.purchasePrice,
+                  balanceAfter: newStock,
+                  referenceType: 'INVOICE_DELETE',
+                  referenceId: invoice.invoiceNumber,
+                  notes: `Restored stock from permanently deleted invoice ${invoice.invoiceNumber}`,
+                  createdBy: req.user?.name || 'Admin',
+                },
+              });
+            }
+          }
+        }
+      }
+
+      // B. If invoice had a customer and balance, reverse the balance impact
+      if (invoice.customerId && invoice.balanceAmount > 0) {
+        await tx.customer.update({
+          where: { id: invoice.customerId },
+          data: {
+            currentBalance: { decrement: invoice.balanceAmount },
+          },
+        });
+      }
+
+      // C. Delete cascade records
+      // SyncJobs
+      await tx.syncJob.deleteMany({
+        where: {
+          OR: [
+            { localRecordId: invoice.id },
+            { entityType: 'INVOICE', payload: { contains: invoice.invoiceNumber } },
+          ],
+        },
+      });
+
+      // SalesReturns & SalesReturnItems
+      for (const sr of invoice.salesReturns || []) {
+        await tx.salesReturnItem.deleteMany({ where: { salesReturnId: sr.id } });
+      }
+      await tx.salesReturn.deleteMany({ where: { invoiceId: invoice.id } });
+
+      // Payments
+      await tx.payment.deleteMany({ where: { invoiceId: invoice.id } });
+
+      // InvoiceItems
+      await tx.invoiceItem.deleteMany({ where: { invoiceId: invoice.id } });
+
+      // Invoice itself
+      await tx.invoice.delete({ where: { id: invoice.id } });
+
+      // D. Sequence Rollback:
+      // If the deleted bill was the most recent bill, roll back invoiceNextNumber so the next bill takes its place!
+      let rolledBackTo = null;
+      if (business) {
+        const remainingInvoices = await tx.invoice.findMany({
+          select: { invoiceNumber: true },
+        });
+
+        const remainingNumbers = remainingInvoices
+          .map((inv) => {
+            const m = inv.invoiceNumber.match(/\d+/);
+            return m ? parseInt(m[0], 10) : null;
+          })
+          .filter((n) => n !== null && !isNaN(n));
+
+        const maxRemaining = remainingNumbers.length > 0 ? Math.max(...remainingNumbers) : 1000;
+        const targetNext = maxRemaining + 1;
+
+        if (targetNext < business.invoiceNextNumber) {
+          await tx.businessProfile.update({
+            where: { id: business.id },
+            data: { invoiceNextNumber: targetNext },
+          });
+          rolledBackTo = targetNext;
+        }
+      }
+
+      return { rolledBackTo };
+    });
+
+    if (req.logAudit) {
+      req.logAudit('DELETE_INVOICE', 'INVOICE', invoice.id, {
+        invoiceNumber: invoice.invoiceNumber,
+        grandTotal: invoice.grandTotal,
+        rolledBackTo: deletionResult.rolledBackTo,
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Invoice ${invoice.invoiceNumber} permanently deleted.${
+        deletionResult.rolledBackTo
+          ? ` Next bill sequence rolled back to #${deletionResult.rolledBackTo}.`
+          : ''
+      }`,
+      deletedInvoiceNumber: invoice.invoiceNumber,
+      nextInvoiceNumber: deletionResult.rolledBackTo || business?.invoiceNextNumber,
+    });
+  } catch (err) {
+    console.error('Delete invoice error:', err);
+    res.status(500).json({ error: 'Failed to delete invoice: ' + err.message });
   }
 });
 
