@@ -135,10 +135,10 @@ router.post('/upload-image', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/products - List products with optional search, category, and low stock filters
+// GET /api/products - List products with optional search, category, low stock, and pagination
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { search, categoryId, status, lowStock } = req.query;
+    const { search, categoryId, status, lowStock, page, limit } = req.query;
     const where = {};
 
     if (search && search.trim()) {
@@ -160,6 +160,46 @@ router.get('/', optionalAuth, async (req, res) => {
       where.status = status;
     }
 
+    if (lowStock === 'true') {
+      const lowRows = await prisma.$queryRaw`SELECT id FROM "Product" WHERE "currentStock" <= "minStock"`;
+      const lowIds = lowRows.map((r) => r.id);
+      where.id = { in: lowIds };
+    }
+
+    const isPaginated = page !== undefined || limit !== undefined;
+
+    if (isPaginated) {
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const pageSize = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+      const skip = (pageNum - 1) * pageSize;
+
+      const [total, products] = await Promise.all([
+        prisma.product.count({ where }),
+        prisma.product.findMany({
+          where,
+          include: {
+            category: { select: { id: true, name: true } },
+            supplier: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: pageSize,
+        }),
+      ]);
+
+      const filtered = products.map((p) => filterProductForUser(p, req.user));
+
+      return res.json({
+        products: filtered,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: pageSize,
+          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+        },
+      });
+    }
+
     let products = await prisma.product.findMany({
       where,
       include: {
@@ -168,10 +208,6 @@ router.get('/', optionalAuth, async (req, res) => {
       },
       orderBy: { createdAt: 'desc' },
     });
-
-    if (lowStock === 'true') {
-      products = products.filter((p) => p.currentStock <= p.minStock);
-    }
 
     res.json(products.map((p) => filterProductForUser(p, req.user)));
   } catch (err) {

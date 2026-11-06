@@ -17,6 +17,8 @@ import {
   Camera,
   X,
   Sparkles,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ProductModal from '../components/products/ProductModal';
@@ -33,10 +35,13 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters
+  // Filters & Pagination
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
 
   // Direct Photo Capture State
   const [uploadingProductId, setUploadingProductId] = useState(null);
@@ -94,15 +99,23 @@ export default function ProductsPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (search) params.append('search', search);
+      if (search.trim()) params.append('search', search.trim());
       if (selectedCategory !== 'all') params.append('categoryId', selectedCategory);
       if (lowStockOnly) params.append('lowStock', 'true');
+      params.append('page', String(page));
+      params.append('limit', String(pageSize));
 
       const res = await fetch(`/api/products?${params.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
-      setProducts(Array.isArray(data) ? data : []);
+      if (data && data.pagination) {
+        setProducts(data.products || []);
+        setPagination(data.pagination);
+      } else if (Array.isArray(data)) {
+        setProducts(data);
+        setPagination({ total: data.length, totalPages: 1, page: 1, limit: data.length });
+      }
     } catch (err) {
       console.error('Failed to fetch products:', err);
     } finally {
@@ -117,12 +130,29 @@ export default function ProductsPage() {
     return () => window.removeEventListener('inventory-updated', handleInv);
   }, []);
 
+  // When filters or page change, fetch debounced
   useEffect(() => {
     const delayDebounce = setTimeout(() => {
       fetchProducts();
     }, 200);
     return () => clearTimeout(delayDebounce);
-  }, [search, selectedCategory, lowStockOnly]);
+  }, [search, selectedCategory, lowStockOnly, page, pageSize]);
+
+  // Reset page to 1 when search or category filter changes
+  const handleSearchChange = (val) => {
+    setSearch(val);
+    setPage(1);
+  };
+
+  const handleCategoryChange = (val) => {
+    setSelectedCategory(val);
+    setPage(1);
+  };
+
+  const handleToggleLowStock = () => {
+    setLowStockOnly((prev) => !prev);
+    setPage(1);
+  };
 
   const handleEdit = (product) => {
     setSelectedProduct(product);
@@ -272,13 +302,13 @@ export default function ProductsPage() {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Search by title, SKU, barcode, or HSN..."
             className="w-full pl-10 pr-8 py-2 bg-stone-950 border border-stone-800 rounded-xl text-stone-100 text-xs focus:outline-none focus:border-amber-500 transition-colors"
           />
           {search && (
             <button
-              onClick={() => setSearch('')}
+              onClick={() => handleSearchChange('')}
               className="absolute right-2.5 top-2.5 text-stone-500 hover:text-stone-300 cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
@@ -289,7 +319,7 @@ export default function ProductsPage() {
         <div className="flex items-center gap-2">
           <select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            onChange={(e) => handleCategoryChange(e.target.value)}
             className="flex-1 sm:flex-none px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-stone-300 text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
           >
             <option value="all">All Categories ({categories.length})</option>
@@ -302,7 +332,7 @@ export default function ProductsPage() {
 
           <button
             type="button"
-            onClick={() => setLowStockOnly(!lowStockOnly)}
+            onClick={handleToggleLowStock}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer shrink-0 ${
               lowStockOnly
                 ? 'bg-rose-950/80 border-rose-800 text-rose-300'
@@ -686,6 +716,82 @@ export default function ProductsPage() {
           </table>
         </div>
       </div>
+
+      {/* Pagination Control Bar */}
+      {pagination.total > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5 bg-stone-900 border border-stone-800 rounded-2xl text-xs text-stone-400">
+          <div className="flex items-center gap-2">
+            <span>
+              Showing <strong className="text-stone-200">{(page - 1) * pageSize + 1}</strong> to{' '}
+              <strong className="text-stone-200">{Math.min(page * pageSize, pagination.total)}</strong> of{' '}
+              <strong className="text-amber-400 font-mono font-bold">{pagination.total.toLocaleString()}</strong> products
+            </span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="px-2 py-1 bg-stone-950 border border-stone-800 rounded-lg text-stone-300 text-xs focus:border-amber-500 cursor-pointer ml-2"
+            >
+              <option value={25}>25 / page</option>
+              <option value={50}>50 / page</option>
+              <option value={100}>100 / page</option>
+              <option value={200}>200 / page</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              disabled={page <= 1}
+              onClick={() => {
+                setPage(1);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-stone-950 border border-stone-800 text-stone-300 hover:text-stone-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              First
+            </button>
+            <button
+              disabled={page <= 1}
+              onClick={() => {
+                setPage((p) => Math.max(1, p - 1));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-stone-950 border border-stone-800 text-stone-300 hover:text-stone-100 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+              <span>Prev</span>
+            </button>
+
+            <span className="px-3 py-1 font-mono text-stone-200 font-semibold bg-stone-800/80 rounded-lg">
+              Page {page} of {pagination.totalPages}
+            </span>
+
+            <button
+              disabled={page >= pagination.totalPages}
+              onClick={() => {
+                setPage((p) => Math.min(pagination.totalPages, p + 1));
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-stone-950 border border-stone-800 text-stone-300 hover:text-stone-100 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-1 cursor-pointer"
+            >
+              <span>Next</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              disabled={page >= pagination.totalPages}
+              onClick={() => {
+                setPage(pagination.totalPages);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="px-2.5 py-1.5 rounded-lg bg-stone-950 border border-stone-800 text-stone-300 hover:text-stone-100 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Last
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Modals - Unmounted when closed for zero hook divergence */}
       {isProductModalOpen && (
