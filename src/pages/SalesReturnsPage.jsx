@@ -49,8 +49,30 @@ export default function SalesReturnsPage() {
   };
 
   const executeInvoiceLookup = async (lookupQuery) => {
-    const q = (lookupQuery || invoiceQuery || '').trim();
+    let q = (lookupQuery || invoiceQuery || '').trim();
     if (!q) return;
+
+    // Smart client-side normalization:
+    // 1. If user enters pure digits "1036", or prefix typo "C-1036", "ca-1036", "CA 1036":
+    // Normalize to standard "CA-1036".
+    const digitsOnly = q.match(/^\d+$/);
+    if (digitsOnly) {
+      q = `CA-${digitsOnly[0]}`;
+    } else {
+      const prefixTypo = q.match(/^([a-zA-Z]{1,2})[-\s]?(\d+)$/);
+      if (prefixTypo) {
+        q = `CA-${prefixTypo[2]}`;
+      }
+    }
+
+    // 2. Check if any recent invoice matches the numeric query as a fallback
+    const numPart = (q.match(/\d+/) || [])[0];
+    if (numPart && recentInvoices.length > 0) {
+      const match = recentInvoices.find((r) => r.invoiceNumber.endsWith(numPart) || r.invoiceNumber.includes(numPart));
+      if (match) {
+        q = match.invoiceNumber;
+      }
+    }
 
     setLoading(true);
     setSearchError('');
