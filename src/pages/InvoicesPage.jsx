@@ -94,7 +94,15 @@ export default function InvoicesPage() {
         },
       });
 
-      const data = await res.json();
+      const contentType = res.headers.get('content-type') || '';
+      let data = {};
+      if (contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const text = await res.text();
+        throw new Error(res.status === 404 ? 'Delete endpoint not active on running server. Please restart the app.' : text.slice(0, 100));
+      }
+
       if (!res.ok) throw new Error(data.error || 'Failed to delete invoice');
 
       setNotification({
@@ -445,3 +453,4 @@ export default function InvoicesPage() {
     </div>
   );
 }
+
