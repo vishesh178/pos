@@ -73,16 +73,33 @@ export default function SalesReturnsPage() {
       setInvoice(data.invoice);
       setInvoiceQuery(data.invoice.invoiceNumber);
 
-      // Initialize selected items state
+      // Initialize selected items state with accurate return balances
       const initialMap = {};
       data.invoice.items.forEach((it) => {
-        initialMap[it.productId] = {
+        const prodKey = it.productId || it.id;
+        const alreadyReturned = it.alreadyReturned !== undefined
+          ? it.alreadyReturned
+          : (data.invoice.salesReturns || []).reduce((sum, sr) => {
+              const matches = (sr.items || []).filter((ri) => ri.productId === prodKey);
+              return sum + matches.reduce((s, ri) => s + ri.quantity, 0);
+            }, 0);
+
+        const remainingReturnable = it.remainingReturnable !== undefined
+          ? it.remainingReturnable
+          : Math.max(0, it.quantity - alreadyReturned);
+
+        const isFullyReturned = remainingReturnable <= 0;
+
+        initialMap[prodKey] = {
           selected: false,
-          quantity: 1,
-          maxQuantity: it.quantity,
+          quantity: remainingReturnable > 0 ? 1 : 0,
+          maxQuantity: remainingReturnable,
+          alreadyReturned,
+          originalQuantity: it.quantity,
+          isFullyReturned,
           condition: 'RESTOCKABLE',
           unitPrice: it.unitPrice,
-          refundAmount: it.unitPrice,
+          refundAmount: remainingReturnable > 0 ? it.unitPrice : 0,
         };
       });
       setSelectedItems(initialMap);
@@ -106,6 +123,7 @@ export default function SalesReturnsPage() {
   const toggleItemSelect = (productId) => {
     setSelectedItems((prev) => {
       const curr = prev[productId];
+      if (!curr || curr.isFullyReturned || curr.maxQuantity <= 0) return prev;
       return {
         ...prev,
         [productId]: { ...curr, selected: !curr.selected },
@@ -117,6 +135,7 @@ export default function SalesReturnsPage() {
     const q = parseInt(qty, 10) || 1;
     setSelectedItems((prev) => {
       const curr = prev[productId];
+      if (!curr || curr.maxQuantity <= 0) return prev;
       const validQty = Math.min(curr.maxQuantity, Math.max(1, q));
       return {
         ...prev,
@@ -140,13 +159,13 @@ export default function SalesReturnsPage() {
   };
 
   const totalRefund = Object.values(selectedItems)
-    .filter((it) => it.selected)
+    .filter((it) => it.selected && !it.isFullyReturned)
     .reduce((sum, it) => sum + it.refundAmount, 0);
 
   const handleSubmitReturn = async (e) => {
     e.preventDefault();
     const returnItems = Object.entries(selectedItems)
-      .filter(([_, it]) => it.selected)
+      .filter(([_, it]) => it.selected && !it.isFullyReturned && it.quantity > 0)
       .map(([prodId, it]) => ({
         productId: prodId,
         quantity: it.quantity,
@@ -155,7 +174,7 @@ export default function SalesReturnsPage() {
       }));
 
     if (returnItems.length === 0) {
-      alert('Please select at least one item to return.');
+      alert('Please select at least one returnable item.');
       return;
     }
 
@@ -345,17 +364,38 @@ export default function SalesReturnsPage() {
 
           {/* Select Items Table */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300 mb-3">
-              Select Items to Return:
-            </h4>
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-stone-300">
+                Select Items to Return:
+              </h4>
+              <span className="text-[11px] text-stone-400">
+                Only items not yet returned can be selected
+              </span>
+            </div>
+
+            {/* Warning if all items already returned */}
+            {Object.values(selectedItems).length > 0 &&
+              Object.values(selectedItems).every((it) => it.isFullyReturned) && (
+                <div className="mb-3 p-3.5 bg-amber-950/40 border border-amber-800/60 text-amber-300 rounded-xl text-xs flex items-center gap-2.5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-400" />
+                  <span>
+                    All items from invoice {invoice.invoiceNumber} have already been fully returned and refunded. No items remaining.
+                  </span>
+                </div>
+              )}
+
             <div className="space-y-3">
               {invoice.items.map((it) => {
-                const state = selectedItems[it.productId] || {};
+                const prodKey = it.productId || it.id;
+                const state = selectedItems[prodKey] || {};
+                const isFullyReturned = state.isFullyReturned;
                 return (
                   <div
                     key={it.id}
                     className={`p-3.5 rounded-xl border transition-colors ${
-                      state.selected
+                      isFullyReturned
+                        ? 'bg-stone-950/40 border-stone-850 opacity-60'
+                        : state.selected
                         ? 'bg-amber-500/5 border-amber-500/60'
                         : 'bg-stone-950 border-stone-800'
                     }`}
@@ -364,21 +404,37 @@ export default function SalesReturnsPage() {
                       <div className="flex items-center gap-3">
                         <input
                           type="checkbox"
-                          checked={!!state.selected}
-                          onChange={() => toggleItemSelect(it.productId)}
-                          className="w-4 h-4 rounded text-amber-500 bg-stone-900 border-stone-700"
+                          disabled={isFullyReturned}
+                          checked={!isFullyReturned && !!state.selected}
+                          onChange={() => toggleItemSelect(prodKey)}
+                          className="w-4 h-4 rounded text-amber-500 bg-stone-900 border-stone-700 disabled:opacity-30 disabled:cursor-not-allowed"
                         />
                         <div>
-                          <p className="text-sm font-semibold text-stone-100 font-serif">
-                            {it.productName}
-                          </p>
-                          <p className="text-[11px] font-mono text-stone-400">
-                            {it.sku} • Invoiced Qty: {it.quantity} @ ₹{it.unitPrice.toFixed(2)}
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-stone-100 font-serif">
+                              {it.productName}
+                            </p>
+                            {isFullyReturned ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-stone-800 text-stone-400 border border-stone-700">
+                                Fully Returned ({state.alreadyReturned || it.quantity}/{it.quantity})
+                              </span>
+                            ) : state.alreadyReturned > 0 ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/60 text-amber-300 border border-amber-800/60">
+                                Partially Returned ({state.alreadyReturned}/{it.quantity})
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] font-mono text-stone-400 mt-0.5">
+                            {it.sku} • Invoiced: {it.quantity} • Already Returned: {state.alreadyReturned || 0} •{' '}
+                            <span className={state.maxQuantity > 0 ? 'text-emerald-400 font-bold' : 'text-stone-500'}>
+                              Returnable: {state.maxQuantity || 0}
+                            </span>{' '}
+                            @ ₹{it.unitPrice.toFixed(2)}
                           </p>
                         </div>
                       </div>
 
-                      {state.selected && (
+                      {!isFullyReturned && state.selected && (
                         <div className="flex items-center gap-4 text-xs">
                           {/* Qty */}
                           <div className="flex items-center gap-2">
@@ -388,16 +444,17 @@ export default function SalesReturnsPage() {
                               min="1"
                               max={state.maxQuantity}
                               value={state.quantity}
-                              onChange={(e) => updateItemQty(it.productId, e.target.value)}
-                              className="w-16 px-2 py-1 bg-stone-900 border border-stone-700 rounded text-center font-mono font-bold text-stone-100"
+                              onChange={(e) => updateItemQty(prodKey, e.target.value)}
+                              className="w-16 px-2 py-1 bg-stone-900 border border-stone-700 rounded text-center font-mono font-bold text-stone-100 focus:border-amber-500 focus:outline-none"
                             />
+                            <span className="text-[10px] text-stone-500 font-mono">(max {state.maxQuantity})</span>
                           </div>
 
                           {/* Condition Selector */}
                           <div className="flex items-center gap-1.5 bg-stone-900 p-1 rounded-lg border border-stone-800">
                             <button
                               type="button"
-                              onClick={() => updateItemCondition(it.productId, 'RESTOCKABLE')}
+                              onClick={() => updateItemCondition(prodKey, 'RESTOCKABLE')}
                               className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 ${
                                 state.condition === 'RESTOCKABLE'
                                   ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
@@ -409,7 +466,7 @@ export default function SalesReturnsPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => updateItemCondition(it.productId, 'DAMAGED')}
+                              onClick={() => updateItemCondition(prodKey, 'DAMAGED')}
                               className={`px-2 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 ${
                                 state.condition === 'DAMAGED'
                                   ? 'bg-rose-950 text-rose-400 border border-rose-800'
@@ -432,6 +489,41 @@ export default function SalesReturnsPage() {
               })}
             </div>
           </div>
+
+          {/* Previous Returns History for this Invoice */}
+          {invoice.salesReturns && invoice.salesReturns.length > 0 && (
+            <div className="p-4 bg-stone-950 border border-stone-800/80 rounded-xl space-y-2.5 text-xs">
+              <span className="font-semibold text-stone-300 flex items-center gap-1.5 text-amber-400">
+                <RotateCcw className="w-3.5 h-3.5" />
+                Previous Returns on Invoice {invoice.invoiceNumber} ({invoice.salesReturns.length}):
+              </span>
+              <div className="divide-y divide-stone-800">
+                {invoice.salesReturns.map((sr) => (
+                  <div key={sr.id} className="py-2 flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-amber-300">{sr.returnNumber}</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-stone-800 text-stone-300">
+                          {sr.refundMethod}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-stone-400 truncate max-w-sm mt-0.5">
+                        {sr.reason || 'Customer Return'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono font-bold text-rose-400">
+                        -₹{sr.totalRefundAmount?.toFixed(2)}
+                      </span>
+                      <p className="text-[10px] text-stone-500 mt-0.5">
+                        {new Date(sr.createdAt).toLocaleDateString('en-IN')}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Refund Method & Reason */}
           <div className="grid grid-cols-2 gap-4 text-xs pt-2">

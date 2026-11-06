@@ -375,9 +375,23 @@ router.get('/invoices/:id', async (req, res) => {
 
     // If an exact or cleanly normalized invoice was resolved, return it!
     if (invoice) {
+      const enrichedItems = invoice.items.map((it) => {
+        const alreadyReturned = (invoice.salesReturns || []).reduce((sum, sr) => {
+          const matches = (sr.items || []).filter((ri) => ri.productId === it.productId);
+          return sum + matches.reduce((s, ri) => s + ri.quantity, 0);
+        }, 0);
+        const remainingReturnable = Math.max(0, it.quantity - alreadyReturned);
+        return {
+          ...it,
+          alreadyReturned,
+          remainingReturnable,
+          isFullyReturned: remainingReturnable === 0,
+        };
+      });
+
       return res.json({
         success: true,
-        invoice,
+        invoice: { ...invoice, items: enrichedItems },
         businessProfile: business,
       });
     }
@@ -540,11 +554,52 @@ router.post('/returns', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BIL
 
     const invoice = await prisma.invoice.findFirst({
       where: { OR: [{ id: invoiceId }, { invoiceNumber: invoiceId }] },
-      include: { items: true },
+      include: {
+        items: true,
+        salesReturns: { include: { items: true } },
+      },
     });
 
     if (!invoice) {
       return res.status(404).json({ error: 'Referenced invoice not found.' });
+    }
+
+    // Strict Return Quantity Validation:
+    // Prevent duplicate or excess returns of the same items beyond original invoiced quantities
+    for (const item of items) {
+      const invItem = invoice.items.find((i) => i.productId === item.productId);
+      if (!invItem) {
+        return res.status(400).json({
+          error: `Product "${item.productId}" was not part of invoice ${invoice.invoiceNumber}.`,
+        });
+      }
+
+      const reqQty = parseInt(item.quantity, 10);
+      if (isNaN(reqQty) || reqQty <= 0) {
+        return res.status(400).json({
+          error: `Invalid return quantity (${item.quantity}) for "${invItem.productName}".`,
+        });
+      }
+
+      // Calculate previously returned quantity for this product across all returns for this invoice
+      const previouslyReturned = (invoice.salesReturns || []).reduce((sum, sr) => {
+        const matchingItems = (sr.items || []).filter((ri) => ri.productId === item.productId);
+        return sum + matchingItems.reduce((s, ri) => s + ri.quantity, 0);
+      }, 0);
+
+      const maxReturnable = invItem.quantity - previouslyReturned;
+
+      if (maxReturnable <= 0) {
+        return res.status(400).json({
+          error: `Item "${invItem.productName}" has already been completely returned (${previouslyReturned} of ${invItem.quantity} units returned). Cannot return again.`,
+        });
+      }
+
+      if (reqQty > maxReturnable) {
+        return res.status(400).json({
+          error: `Cannot return ${reqQty} unit(s) of "${invItem.productName}". Maximum returnable is ${maxReturnable} (${previouslyReturned} already returned from original ${invItem.quantity} sold).`,
+        });
+      }
     }
 
     const totalRefund = items.reduce((sum, it) => sum + (parseFloat(it.refundAmount) || 0), 0);
@@ -627,6 +682,29 @@ router.post('/returns', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BIL
           notes: `Refund issued for sales return ${returnNumber}`,
         },
       });
+
+      // 4. Check if all items on the invoice are now fully returned
+      let allFullyReturned = true;
+      for (const invItem of invoice.items) {
+        const prevReturned = (invoice.salesReturns || []).reduce((sum, sr) => {
+          const match = (sr.items || []).filter((ri) => ri.productId === invItem.productId);
+          return sum + match.reduce((s, ri) => s + ri.quantity, 0);
+        }, 0);
+        const thisReturn = items
+          .filter((ri) => ri.productId === invItem.productId)
+          .reduce((s, ri) => s + (parseInt(ri.quantity, 10) || 0), 0);
+        if (prevReturned + thisReturn < invItem.quantity) {
+          allFullyReturned = false;
+          break;
+        }
+      }
+
+      if (allFullyReturned) {
+        await tx.invoice.update({
+          where: { id: invoice.id },
+          data: { status: 'RETURNED' },
+        });
+      }
 
       return salesReturn;
     });
