@@ -9,6 +9,8 @@ import {
   FileSpreadsheet,
   Check,
   RefreshCw,
+  Camera,
+  Image as ImageIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../../context/AuthContext';
@@ -22,6 +24,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
   const [csvText, setCsvText] = useState('');
   const [parsedRows, setParsedRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(null); // { current, total, percent }
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
 
@@ -93,22 +96,74 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
   };
 
   // Process 2D array of raw rows from Excel (.xlsx/.xls) or CSV
-  const processRawRows = (rows, sourceName = '') => {
+  const processRawRows = (rows, sourceName = '', bookFiles = null) => {
     try {
       if (!rows || rows.length < 2) {
         throw new Error('File must contain at least a header row and 1 data row.');
       }
 
-      // 1. Locate header row
+      // 1. Extract embedded images from OpenXML drawings if present in .xlsx
+      const rowToImage = {};
+      if (bookFiles) {
+        try {
+          const drawingFile = bookFiles['xl/drawings/drawing1.xml'];
+          const relsFile = bookFiles['xl/drawings/_rels/drawing1.xml.rels'];
+
+          if (drawingFile && relsFile) {
+            const decoder = new TextDecoder('utf-8');
+            const relsXml = decoder.decode(relsFile.content);
+            const relMap = {};
+            const relRegex = /<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g;
+            let rm;
+            while ((rm = relRegex.exec(relsXml)) !== null) {
+              relMap[rm[1]] = rm[2].replace(/^(\.\.\/)+/, 'xl/');
+            }
+
+            const drawingXml = decoder.decode(drawingFile.content);
+            const anchorRegex = /<xdr:(?:twoCellAnchor|oneCellAnchor)[^>]*>[\s\S]*?<\/xdr:(?:twoCellAnchor|oneCellAnchor)>/g;
+            let aMatch;
+            while ((aMatch = anchorRegex.exec(drawingXml)) !== null) {
+              const block = aMatch[0];
+              const rowMatch = block.match(/<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/);
+              const blipMatch = block.match(/<a:blip[^>]*r:embed="([^"]+)"/);
+              if (rowMatch && blipMatch) {
+                const rowIdx = parseInt(rowMatch[1], 10);
+                const rId = blipMatch[1];
+                const mediaPath = relMap[rId];
+                if (mediaPath && bookFiles[mediaPath]) {
+                  const content = bookFiles[mediaPath].content;
+                  const ext = mediaPath.endsWith('.jpeg') || mediaPath.endsWith('.jpg') ? 'jpeg' : 'png';
+                  
+                  // Convert Uint8Array to base64 safely in chunks
+                  const bytes = new Uint8Array(content);
+                  let binary = '';
+                  const chunkSize = 8192;
+                  for (let ci = 0; ci < bytes.length; ci += chunkSize) {
+                    binary += String.fromCharCode.apply(null, bytes.subarray(ci, Math.min(ci + chunkSize, bytes.length)));
+                  }
+                  rowToImage[rowIdx] = `data:image/${ext};base64,${btoa(binary)}`;
+                }
+              }
+            }
+          }
+        } catch (imgErr) {
+          console.warn('Embedded image extraction note:', imgErr);
+        }
+      }
+
+      // 2. Locate header row (skip report headers like "Item List", look for row with product name and other attributes)
       let headerRowIndex = -1;
       let headers = [];
 
-      for (let i = 0; i < Math.min(10, rows.length); i++) {
+      for (let i = 0; i < Math.min(25, rows.length); i++) {
         const candidate = (rows[i] || []).map((c) => String(c || '').trim().toLowerCase());
-        const hasName = candidate.some((c) => c.includes('name') || c.includes('product') || c.includes('item') || c.includes('desc') || c === 'title' || c === 'particulars');
-        const hasPriceOrSku = candidate.some((c) => c.includes('sku') || c.includes('price') || c.includes('rate') || c.includes('stock') || c.includes('qty'));
+        const nonEmpty = candidate.filter((c) => c.length > 0);
+        if (nonEmpty.length < 3) continue; // Skip single titles or empty metadata rows
 
-        if (hasName && (hasPriceOrSku || candidate.length >= 2)) {
+        const hasName = candidate.some((c) => c.includes('product') || (c.includes('name') && !c.includes('file')) || c === 'item' || c.includes('particular') || c.includes('desc'));
+        const hasOther = candidate.some((c) => c.includes('cost') || c.includes('price') || c.includes('rate') || c.includes('stock') || c.includes('group') || c.includes('category') || c.includes('code') || c.includes('sku') || c.includes('ordinal') || c.includes('sale') || c.includes('mrp'));
+
+        if (hasName && hasOther) {
           headerRowIndex = i;
           headers = candidate;
           break;
@@ -116,12 +171,25 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
       }
 
       if (headerRowIndex === -1) {
-        // Fallback to first row
-        headerRowIndex = 0;
-        headers = (rows[0] || []).map((c) => String(c || '').trim().toLowerCase());
+        // Fallback to first multi-cell row
+        for (let i = 0; i < Math.min(10, rows.length); i++) {
+          const candidate = (rows[i] || []).map((c) => String(c || '').trim().toLowerCase());
+          if (candidate.filter((c) => c.length > 0).length >= 2) {
+            headerRowIndex = i;
+            headers = candidate;
+            break;
+          }
+        }
+        if (headerRowIndex === -1) {
+          headerRowIndex = 0;
+          headers = (rows[0] || []).map((c) => String(c || '').trim().toLowerCase());
+        }
       }
 
-      // 2. Identify column indices
+      // Check next row in case of two-row headers (e.g. Qty, MRP under Inner Packing)
+      const subHeaders = (rows[headerRowIndex + 1] || []).map((c) => String(c || '').trim().toLowerCase());
+
+      // 3. Identify column indices
       let colName = -1;
       let colCategory = -1;
       let colSku = -1;
@@ -134,21 +202,28 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
       let colGst = -1;
 
       headers.forEach((h, idx) => {
-        if (colName === -1 && (h.includes('name') || h.includes('item') || h.includes('product') || h.includes('desc') || h === 'title' || h === 'particulars')) {
+        const subH = subHeaders[idx] || '';
+        
+        // Skip explicitly ignored columns
+        if (h.includes('image file') || h.includes('tot.image') || h.includes('file size') || h.includes('rack') || h.includes('pallet') || h.includes('packing')) {
+          return;
+        }
+
+        if (colName === -1 && (h === 'item' || h.includes('product') || (h.includes('name') && !h.includes('file')) || h.includes('particulars'))) {
           colName = idx;
-        } else if (colCategory === -1 && (h.includes('cat') || h.includes('group') || h.includes('type'))) {
-          colCategory = idx;
-        } else if (colSku === -1 && (h.includes('sku') || h.includes('code') || h.includes('model'))) {
+        } else if (colSku === -1 && (h === 'item code' || h.includes('sku') || h.includes('ordinal') || (h.includes('code') && !h.includes('main')))) {
           colSku = idx;
+        } else if (colCategory === -1 && (h.includes('group') || h.includes('category') || h.includes('cat') || h.includes('type') || h.includes('department'))) {
+          colCategory = idx;
         } else if (colBarcode === -1 && (h.includes('bar') || h.includes('ean') || h.includes('upc'))) {
           colBarcode = idx;
-        } else if (colPurchase === -1 && (h.includes('cost') || h.includes('pur') || h.includes('buy'))) {
+        } else if (colPurchase === -1 && (h.includes('cost') || h.includes('purchase') || h.includes('buy price'))) {
           colPurchase = idx;
-        } else if (colSelling === -1 && (h.includes('sell') || h.includes('sale') || h.includes('rate') || h.includes('price') || h === 'mrp')) {
+        } else if (colSelling === -1 && (h.includes('sale') || h.includes('sell') || h.includes('rate') || h === 'price' || (h.includes('price') && !h.includes('cost')) || subH.includes('mrp'))) {
           colSelling = idx;
-        } else if (colMrp === -1 && h.includes('mrp')) {
+        } else if (colMrp === -1 && (h.includes('mrp') || subH.includes('mrp'))) {
           colMrp = idx;
-        } else if (colStock === -1 && (h.includes('stock') || h.includes('qty') || h.includes('quantity') || h.includes('balance') || h.includes('count'))) {
+        } else if (colStock === -1 && (h.includes('quntity') || h.includes('stock') || h.includes('closing') || h.includes('qty') || h.includes('quantity') || h.includes('balance') || h.includes('count'))) {
           colStock = idx;
         } else if (colHsn === -1 && (h.includes('hsn') || h.includes('sac'))) {
           colHsn = idx;
@@ -160,7 +235,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
       // Default name to column 0 if still not detected
       if (colName === -1 && headers.length > 0) colName = 0;
 
-      // 3. Parse data rows
+      // 4. Parse data rows
       const parsed = [];
       for (let r = headerRowIndex + 1; r < rows.length; r++) {
         const row = rows[r];
@@ -169,28 +244,78 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         const nameVal = String(row[colName] || '').trim();
         if (!nameVal) continue; // Skip empty rows
 
-        const skuVal = colSku !== -1 ? String(row[colSku] || '').trim() : '';
+        // Skip subheaders or group separator rows where cost, stock, and sku are all empty
+        const rawCost = colPurchase !== -1 ? String(row[colPurchase] || '').trim() : '';
+        const rawStock = colStock !== -1 ? String(row[colStock] || '').trim() : '';
+        const rawSku = colSku !== -1 ? String(row[colSku] || '').trim() : '';
+        if (!rawCost && !rawStock && !rawSku && nameVal.length < 25) {
+          // Category separator row (e.g. ",FLOWER,,,,,,")
+          continue;
+        }
+
+        const skuVal = rawSku || '';
         const barcodeVal = colBarcode !== -1 ? String(row[colBarcode] || '').replace(/['"\s]/g, '') : '';
-        const catVal = colCategory !== -1 ? String(row[colCategory] || '').trim() : 'General';
         
-        const purVal = colPurchase !== -1 ? parseFloat(String(row[colPurchase]).replace(/[^0-9.-]+/g, '')) || 0 : 0;
-        const sellVal = colSelling !== -1 ? parseFloat(String(row[colSelling]).replace(/[^0-9.-]+/g, '')) || 0 : 0;
-        const mrpVal = colMrp !== -1 ? parseFloat(String(row[colMrp]).replace(/[^0-9.-]+/g, '')) || sellVal : sellVal;
-        const stockVal = colStock !== -1 ? parseInt(String(row[colStock]).replace(/[^0-9-]+/g, ''), 10) || 0 : 0;
+        // Smart category resolution with name prefix detection
+        let catVal = colCategory !== -1 ? String(row[colCategory] || '').trim() : '';
+        if (!catVal || catVal === 'General') {
+          if (nameVal.startsWith('SHP')) catVal = 'Showpieces & Sculptures';
+          else if (nameVal.startsWith('FL')) catVal = 'Artificial Flowers';
+          else if (nameVal.startsWith('FP')) catVal = 'Flower Pots & Planters';
+          else if (nameVal.startsWith('PL')) catVal = 'Artificial Plants';
+          else if (nameVal.startsWith('WC')) catVal = 'Wall Clocks';
+          else if (nameVal.startsWith('WP')) catVal = 'Wall Art & Paintings';
+          else catVal = 'General';
+        }
+
+        const purVal = rawCost ? parseFloat(rawCost.replace(/[^0-9.-]+/g, '')) || 0 : 0;
+        let sellVal = colSelling !== -1 ? parseFloat(String(row[colSelling]).replace(/[^0-9.-]+/g, '')) || 0 : 0;
+        let mrpVal = colMrp !== -1 ? parseFloat(String(row[colMrp]).replace(/[^0-9.-]+/g, '')) || 0 : 0;
+
+        // Smart Price Extraction: If selling price / MRP is 0 or missing, detect A<Price> pattern in name
+        // e.g. "FL A115 FL-8" -> 115, "FP A1250 FLOWER POT" -> 1250, "SHP A1050 BK-183" -> 1050
+        if (sellVal <= 0 && mrpVal <= 0) {
+          const matchA = nameVal.match(/\bA(\d{2,6})\b/i);
+          const matchPrefix = nameVal.match(/^(?:FL|FP|PL|SHP|WC|WP|NL|PF|SW)\s+(\d{2,6})\b/i);
+          const matchSlash = nameVal.match(/\b(\d{2,6})\//);
+
+          if (matchA) {
+            sellVal = parseFloat(matchA[1]);
+          } else if (matchPrefix) {
+            sellVal = parseFloat(matchPrefix[1]);
+          } else if (matchSlash) {
+            sellVal = parseFloat(matchSlash[1]);
+          } else if (purVal > 0) {
+            sellVal = Math.round(purVal * 1.4); // Standard retail markup
+          }
+        } else if (sellVal <= 0 && mrpVal > 0) {
+          sellVal = mrpVal;
+        }
+
+        if (mrpVal <= 0) {
+          mrpVal = sellVal;
+        }
+
+        // Clamp stock to >= 0 (negative closing stock in retail software means pending PO)
+        const stockVal = rawStock ? Math.max(0, parseInt(rawStock.replace(/[^0-9-]+/g, ''), 10) || 0) : 0;
         const hsnVal = colHsn !== -1 ? String(row[colHsn] || '').trim() : '';
         const gstVal = colGst !== -1 ? parseFloat(String(row[colGst]).replace(/[^0-9.-]+/g, '')) || 18 : 18;
+
+        // Match image from row index if drawing anchor was found
+        const imageBase64 = rowToImage[r] || null;
 
         parsed.push({
           name: nameVal,
           sku: skuVal || undefined,
           barcode: barcodeVal || undefined,
           category: catVal || 'General',
-          purchasePrice: purVal,
-          sellingPrice: sellVal,
-          mrp: mrpVal || sellVal,
-          currentStock: Math.max(0, stockVal),
+          purchasePrice: Math.max(0, purVal),
+          sellingPrice: Math.max(0, sellVal),
+          mrp: Math.max(0, mrpVal),
+          currentStock: stockVal,
           hsnCode: hsnVal || '9701',
           gstRate: gstVal,
+          imageBase64: imageBase64 || undefined,
         });
       }
 
@@ -223,8 +348,8 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         const buffer = event.target?.result;
         if (!buffer) return;
 
-        // SheetJS parses binary .xlsx, .xls, .csv, and .tsv automatically
-        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+        // SheetJS parses binary .xlsx with bookFiles: true to retain drawing/media images
+        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', bookFiles: true });
         const sheetNames = workbook.SheetNames;
 
         if (!sheetNames || sheetNames.length === 0) {
@@ -237,7 +362,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         const worksheet = workbook.Sheets[activeSheetName];
         const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-        processRawRows(rows, file.name);
+        processRawRows(rows, file.name, workbook.files);
       } catch (err) {
         console.error('Excel upload read error:', err);
         setError('Could not parse Excel file: ' + (err.message || 'Invalid or corrupted format'));
@@ -259,7 +384,6 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
     }
 
     const lines = text.trim().split(/\r?\n/).filter((l) => l.trim().length > 0);
-    // Detect delimiter: tab (\t) or comma (,)
     const firstLine = lines[0] || '';
     const delimiter = firstLine.includes('\t') ? '\t' : ',';
 
@@ -269,40 +393,65 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
     });
 
     setFileName('Pasted Clipboard Data');
-    processRawRows(rows, 'Pasted Data');
+    processRawRows(rows, 'Pasted Data', null);
   };
 
+  // Chunked batch submission to safely handle large catalogs up to 10,000+ items without network timeouts
   const handleImportSubmit = async () => {
     if (parsedRows.length === 0) return;
     setLoading(true);
     setError('');
     setResult(null);
 
+    const BATCH_SIZE = 250;
+    let totalImported = 0;
+    let totalErrors = 0;
+
     try {
-      const res = await fetch('/api/products/bulk-import', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ items: parsedRows }),
+      for (let i = 0; i < parsedRows.length; i += BATCH_SIZE) {
+        const chunk = parsedRows.slice(i, i + BATCH_SIZE);
+        const currentCount = Math.min(i + BATCH_SIZE, parsedRows.length);
+        setProgress({
+          current: currentCount,
+          total: parsedRows.length,
+          percent: Math.round((currentCount / parsedRows.length) * 100),
+        });
+
+        const res = await fetch('/api/products/bulk-import', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ items: chunk }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Batch import failed at item ' + i);
+
+        totalImported += data.importedCount || 0;
+        totalErrors += data.errorsCount || 0;
+      }
+
+      setResult({
+        importedCount: totalImported,
+        errorsCount: totalErrors,
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Import failed');
-
-      setResult(data);
       if (onImported) onImported();
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setProgress(null);
     }
   };
 
+  const imagesCount = parsedRows.filter((r) => !!r.imageBase64).length;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto animate-in fade-in">
-      <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden my-8">
+      <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden my-8">
         {/* Top Header */}
         <div className="px-6 py-4 border-b border-stone-800 flex items-center justify-between bg-stone-900/90">
           <div>
@@ -311,7 +460,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
               <span>Bulk Import Products (Excel & CSV)</span>
             </h3>
             <p className="text-xs text-stone-400 mt-0.5">
-              Upload existing catalog from Microsoft Excel (.xlsx / .xls) or CSV with automatic barcode generation
+              Upload existing catalog from Microsoft Excel (.xlsx / .xls) with automatic photo extraction and smart pricing
             </p>
           </div>
           <button
@@ -360,7 +509,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
                 Click to select your <span className="text-amber-400 font-mono">.xlsx</span> / <span className="text-amber-400 font-mono">.xls</span> or <span className="text-amber-400 font-mono">.csv</span> file
               </p>
               <p className="text-[11px] text-stone-400 mt-1">
-                Supported columns: Product Name, Category, SKU, Barcode, Purchase Price, Selling Price, MRP, Current Stock, HSN, GST Rate
+                Supports embedded product photos, Om Tech exports, and standard catalogs (Name, SKU, Cost, Sale Price, Stock)
               </p>
             </label>
 
@@ -376,10 +525,18 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
               </button>
 
               {fileName && (
-                <span className="text-emerald-400 font-mono text-[11px] flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" />
-                  Loaded: {fileName} ({parsedRows.length} items)
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 font-mono text-[11px] flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" />
+                    Loaded: {fileName} ({parsedRows.length} items)
+                  </span>
+                  {imagesCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono text-[11px] flex items-center gap-1">
+                      <Camera className="w-3 h-3" />
+                      {imagesCount} Photos
+                    </span>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -398,6 +555,28 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
             />
           </div>
 
+          {/* Progress Bar during Batch Upload */}
+          {progress && (
+            <div className="p-3.5 bg-stone-950 border border-amber-500/40 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-amber-400 font-semibold flex items-center gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Importing into database...
+                </span>
+                <span className="text-stone-300 font-bold">{progress.percent}%</span>
+              </div>
+              <div className="w-full bg-stone-800 rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-amber-500 h-2 transition-all duration-300 rounded-full shadow-sm shadow-amber-500"
+                  style={{ width: `${progress.percent}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-stone-400">
+                Uploaded {progress.current} of {progress.total} products safely without timeouts
+              </p>
+            </div>
+          )}
+
           {/* Parsed Rows Preview */}
           {parsedRows.length > 0 && (
             <div>
@@ -406,41 +585,62 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
                   <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                   Preview: {parsedRows.length} Products Detected
                 </h4>
-                <span className="text-[11px] text-stone-400 font-mono">
-                  Auto-generates barcode & SKU if left blank
-                </span>
+                <div className="flex items-center gap-2">
+                  {imagesCount > 0 && (
+                    <span className="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
+                      📸 {imagesCount} photos linked automatically
+                    </span>
+                  )}
+                  <span className="text-[11px] text-stone-400 font-mono">
+                    Auto-generates barcodes & SKUs if blank
+                  </span>
+                </div>
               </div>
-              <div className="max-h-52 overflow-y-auto border border-stone-800 rounded-xl bg-stone-950 text-xs">
+              <div className="max-h-56 overflow-y-auto border border-stone-800 rounded-xl bg-stone-950 text-xs">
                 <table className="w-full text-left">
                   <thead className="bg-stone-900 border-b border-stone-800 text-[10px] uppercase font-bold text-stone-400 sticky top-0">
                     <tr>
+                      <th className="px-3 py-2 w-12 text-center">Photo</th>
                       <th className="px-3 py-2">Product Name</th>
                       <th className="px-3 py-2">Category</th>
                       <th className="px-3 py-2">SKU</th>
-                      <th className="px-3 py-2">Barcode</th>
                       {isAdmin && <th className="px-3 py-2 text-right">Cost (₹)</th>}
                       <th className="px-3 py-2 text-right">Selling (₹)</th>
+                      <th className="px-3 py-2 text-right">MRP (₹)</th>
                       <th className="px-3 py-2 text-right">Stock</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-stone-800 text-stone-300">
-                    {parsedRows.slice(0, 10).map((r, i) => (
+                    {parsedRows.slice(0, 15).map((r, i) => (
                       <tr key={i} className="hover:bg-stone-900/60">
+                        <td className="px-3 py-1.5 text-center">
+                          {r.imageBase64 ? (
+                            <img
+                              src={r.imageBase64}
+                              alt={r.name}
+                              className="w-8 h-8 rounded-lg object-cover border border-amber-500/40 mx-auto"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-stone-900 border border-stone-800 flex items-center justify-center text-stone-600 mx-auto">
+                              <ImageIcon className="w-4 h-4 opacity-40" />
+                            </div>
+                          )}
+                        </td>
                         <td className="px-3 py-1.5 font-medium text-stone-100">{r.name}</td>
                         <td className="px-3 py-1.5 text-stone-400">{r.category || 'General'}</td>
                         <td className="px-3 py-1.5 font-mono text-[11px] text-amber-400">{r.sku || 'Auto-SKU'}</td>
-                        <td className="px-3 py-1.5 font-mono text-[11px] text-stone-400">{r.barcode || 'Auto-EAN13'}</td>
                         {isAdmin && <td className="px-3 py-1.5 text-right font-mono">₹{r.purchasePrice || 0}</td>}
                         <td className="px-3 py-1.5 text-right font-mono text-amber-400 font-bold">₹{r.sellingPrice || 0}</td>
+                        <td className="px-3 py-1.5 text-right font-mono text-stone-400">₹{r.mrp || r.sellingPrice || 0}</td>
                         <td className="px-3 py-1.5 text-right font-bold text-emerald-400">{r.currentStock || 0}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              {parsedRows.length > 10 && (
+              {parsedRows.length > 15 && (
                 <p className="text-[10px] text-stone-400 mt-1">
-                  Showing first 10 of {parsedRows.length} items... All {parsedRows.length} items will be imported.
+                  Showing first 15 of {parsedRows.length} items... All {parsedRows.length} items will be imported.
                 </p>
               )}
             </div>
@@ -451,7 +651,8 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-300 hover:bg-stone-800 transition-colors"
+              disabled={loading}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-stone-300 hover:bg-stone-800 transition-colors disabled:opacity-40"
             >
               Cancel
             </button>
@@ -459,9 +660,16 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
               type="button"
               disabled={loading || parsedRows.length === 0}
               onClick={handleImportSubmit}
-              className="px-6 py-2.5 rounded-xl bg-amber-500 text-stone-950 font-bold text-xs tracking-wide hover:bg-amber-400 transition-colors shadow-lg shadow-amber-950/40 disabled:opacity-40"
+              className="px-6 py-2.5 rounded-xl bg-amber-500 text-stone-950 font-bold text-xs tracking-wide hover:bg-amber-400 transition-colors shadow-lg shadow-amber-950/40 disabled:opacity-40 flex items-center gap-2"
             >
-              {loading ? 'Importing Products...' : `Confirm & Import ${parsedRows.length} Products`}
+              {loading ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Importing Products...</span>
+                </>
+              ) : (
+                <span>Confirm & Import {parsedRows.length} Products</span>
+              )}
             </button>
           </div>
         </div>

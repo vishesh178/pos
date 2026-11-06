@@ -487,7 +487,7 @@ router.delete('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER']), asyn
   }
 });
 
-// POST /api/products/bulk-import - Bulk import with duplicate detection
+// POST /api/products/bulk-import - Bulk import with duplicate detection and image handling
 router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
   try {
     const { items } = req.body; // array of product rows
@@ -498,6 +498,18 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
     const imported = [];
     const errors = [];
 
+    // Pre-cache categories in memory for speed
+    const existingCats = await prisma.category.findMany();
+    const categoryMap = new Map(existingCats.map((c) => [c.name.trim().toLowerCase(), c.id]));
+
+    const uploadsDir = path.resolve(__dirname, '../../uploads/products');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    // Get current max barcode seed
+    let barcodeSeq = (Date.now() % 80000) + 1000;
+
     for (let i = 0; i < items.length; i++) {
       const row = items[i];
       try {
@@ -507,24 +519,59 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
         }
 
         // Auto-assign SKU/Barcode if missing
-        const sku = row.sku && row.sku.trim() ? row.sku.trim() : generateSku(row.category || 'General', Date.now() + i);
-        const barcode = row.barcode && row.barcode.trim() ? row.barcode.trim() : generateEan13Barcode(Date.now() % 90000 + i);
+        const sku = row.sku && row.sku.trim() ? row.sku.trim() : generateSku(row.category || 'General', (Date.now() % 90000) + i);
+        
+        let barcode = row.barcode && String(row.barcode).trim() ? String(row.barcode).trim() : null;
+        if (!barcode) {
+          barcodeSeq = (barcodeSeq + 1) % 89999 + 1;
+          barcode = generateEan13Barcode(barcodeSeq);
+        }
 
-        // Check duplicates
+        // Check SKU duplicate
         const dupSku = await prisma.product.findUnique({ where: { sku } });
         if (dupSku) {
           errors.push({ row: i + 1, sku, error: 'SKU already exists.' });
           continue;
         }
 
+        // Check Barcode duplicate
+        const dupBarcode = await prisma.product.findUnique({ where: { barcode } });
+        if (dupBarcode) {
+          barcodeSeq = (barcodeSeq + 1000) % 89999 + 1;
+          barcode = generateEan13Barcode(barcodeSeq);
+        }
+
         // Category resolution
         let categoryId = null;
-        if (row.category) {
-          let cat = await prisma.category.findUnique({ where: { name: row.category.trim() } });
-          if (!cat) {
-            cat = await prisma.category.create({ data: { name: row.category.trim() } });
+        const catName = row.category ? row.category.trim() : 'General';
+        if (catName) {
+          const lowerCat = catName.toLowerCase();
+          if (categoryMap.has(lowerCat)) {
+            categoryId = categoryMap.get(lowerCat);
+          } else {
+            const cat = await prisma.category.create({ data: { name: catName } });
+            categoryId = cat.id;
+            categoryMap.set(lowerCat, categoryId);
           }
-          categoryId = cat.id;
+        }
+
+        // Handle embedded photo if base64 data URL provided
+        let imageUrl = row.imageUrl || null;
+        if (row.imageBase64 && typeof row.imageBase64 === 'string' && row.imageBase64.startsWith('data:image/')) {
+          try {
+            const matches = row.imageBase64.match(/^data:image\/([a-zA-Z0-9.+]+);base64,(.+)$/);
+            if (matches) {
+              const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+              const dataBuffer = Buffer.from(matches[2], 'base64');
+              const safeSku = sku.replace(/[^a-zA-Z0-9_-]/g, '_').toLowerCase();
+              const safeName = `prod-${safeSku}-${Date.now().toString(36)}.${ext}`;
+              const filePath = path.join(uploadsDir, safeName);
+              fs.writeFileSync(filePath, dataBuffer);
+              imageUrl = `/uploads/products/${safeName}`;
+            }
+          } catch (imgErr) {
+            console.error('Failed to save embedded image for', sku, imgErr);
+          }
         }
 
         const currentStock = row.currentStock ? parseInt(row.currentStock, 10) : 0;
@@ -540,6 +587,7 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
             categoryId,
             brand: row.brand ? row.brand.trim() : 'Curated Art',
             description: row.description ? row.description.trim() : null,
+            imageUrl,
             purchasePrice,
             sellingPrice,
             mrp: row.mrp ? parseFloat(row.mrp) : sellingPrice,
