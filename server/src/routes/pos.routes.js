@@ -317,29 +317,122 @@ router.get('/invoices', async (req, res) => {
   }
 });
 
-// GET /api/pos/invoices/:id - Single invoice with full details
+// GET /api/pos/invoices/:id - Single invoice with full details (Supports Smart Exact + Fuzzy Nearest Match)
 router.get('/invoices/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const invoice = await prisma.invoice.findFirst({
-      where: {
-        OR: [{ id }, { invoiceNumber: id }],
-      },
-      include: {
-        items: true,
-        payments: true,
-        customer: true,
-        salesReturns: { include: { items: true } },
-      },
-    });
-
-    if (!invoice) {
-      return res.status(404).json({ error: 'Invoice not found.' });
+    const rawQuery = (id || '').trim();
+    if (!rawQuery) {
+      return res.status(400).json({ error: 'Invoice query is required.' });
     }
 
     const business = await prisma.businessProfile.findFirst();
+    const activePrefix = business?.invoicePrefix || 'CA-';
 
-    res.json({ invoice, businessProfile: business });
+    const includeOptions = {
+      items: true,
+      payments: true,
+      customer: true,
+      salesReturns: { include: { items: true } },
+    };
+
+    // 1. Direct match: by ID or invoiceNumber (exact)
+    let invoice = await prisma.invoice.findFirst({
+      where: {
+        OR: [{ id: rawQuery }, { invoiceNumber: rawQuery }],
+      },
+      include: includeOptions,
+    });
+
+    // 2. Normalized auto-resolution:
+    // If user typed lowercase (ca-1028), typo'd prefix (C-1028, GT-1028, CA 1028), or pure digits (1028)
+    if (!invoice) {
+      const upperQuery = rawQuery.toUpperCase().replace(/\s+/g, '-');
+      const numMatch = rawQuery.match(/\d+/);
+      const digits = numMatch ? numMatch[0] : null;
+
+      const candidatesToTry = [
+        upperQuery,
+        digits ? `${activePrefix}${digits}` : null,
+        digits ? `CA-${digits}` : null,
+        digits ? `GT-${digits}` : null,
+        digits ? `${digits}` : null,
+      ].filter(Boolean);
+
+      for (const candidate of candidatesToTry) {
+        invoice = await prisma.invoice.findFirst({
+          where: {
+            OR: [
+              { invoiceNumber: candidate },
+              { invoiceNumber: { endsWith: candidate } },
+            ],
+          },
+          include: includeOptions,
+        });
+        if (invoice) break;
+      }
+    }
+
+    // If an exact or cleanly normalized invoice was resolved, return it!
+    if (invoice) {
+      return res.json({
+        success: true,
+        invoice,
+        businessProfile: business,
+      });
+    }
+
+    // 3. No exact match found -> Find NEAREST matches every time!
+    // Fetch recent candidate pool to compute distance
+    const candidatePool = await prisma.invoice.findMany({
+      take: 50,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        customerName: true,
+        grandTotal: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        createdAt: true,
+      },
+    });
+
+    const queryNum = parseInt((rawQuery.match(/\d+/) || [])[0], 10);
+    const upperRaw = rawQuery.toUpperCase();
+
+    // Distance calculation:
+    // - If both have numbers: numeric delta |queryNum - invNum|
+    // - Substring match on invoiceNumber: small penalty (5)
+    // - Substring match on customerName: medium penalty (15)
+    // - Default distance: large (999999)
+    const scoredCandidates = candidatePool.map((inv) => {
+      const invNum = parseInt((inv.invoiceNumber.match(/\d+/) || [])[0], 10);
+      let distance = 999999;
+
+      if (!isNaN(queryNum) && !isNaN(invNum)) {
+        distance = Math.abs(queryNum - invNum);
+      } else if (inv.invoiceNumber.toUpperCase().includes(upperRaw)) {
+        distance = 5;
+      } else if (inv.customerName && inv.customerName.toUpperCase().includes(upperRaw)) {
+        distance = 15;
+      }
+
+      return {
+        ...inv,
+        distance,
+      };
+    });
+
+    scoredCandidates.sort((a, b) => a.distance - b.distance || b.createdAt - a.createdAt);
+    const nearestMatches = scoredCandidates.slice(0, 5);
+
+    return res.status(404).json({
+      error: `Invoice "${rawQuery}" not found.`,
+      searchedQuery: rawQuery,
+      nearestMatches,
+      businessProfile: business,
+    });
   } catch (err) {
     console.error('Fetch invoice details error:', err);
     res.status(500).json({ error: 'Failed to retrieve invoice.' });

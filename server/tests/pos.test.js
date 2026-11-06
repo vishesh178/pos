@@ -136,3 +136,57 @@ test('POS invoice generation produces sequential numbering and atomic stock move
     });
   }
 });
+
+test('Smart Invoice Search resolves exact, lowercase, prefix-typo, pure digits, and returns nearest matches for non-existent queries', async () => {
+  const posRouter = require('../src/routes/pos.routes');
+  const route = posRouter.stack.find((s) => s.route && s.route.path === '/invoices/:id');
+  assert.ok(route, 'GET /invoices/:id route handler must exist');
+  const handler = route.route.stack[0].handle;
+
+  const callHandler = (id) =>
+    new Promise((resolve) => {
+      let statusCode = 200;
+      const req = { params: { id } };
+      const res = {
+        status(code) {
+          statusCode = code;
+          return this;
+        },
+        json(data) {
+          resolve({ status: statusCode, body: data });
+        },
+      };
+      handler(req, res);
+    });
+
+  // 1. Exact match lookup
+  const resExact = await callHandler('CA-1028');
+  assert.equal(resExact.status, 200);
+  assert.equal(resExact.body.invoice.invoiceNumber, 'CA-1028');
+
+  // 2. Lowercase match lookup (ca-1028)
+  const resLower = await callHandler('ca-1028');
+  assert.equal(resLower.status, 200);
+  assert.equal(resLower.body.invoice.invoiceNumber, 'CA-1028');
+
+  // 3. Typo with missing 'A' (C-1028)
+  const resTypo = await callHandler('C-1028');
+  assert.equal(resTypo.status, 200);
+  assert.equal(resTypo.body.invoice.invoiceNumber, 'CA-1028');
+
+  // 4. Pure digits lookup (1028)
+  const resDigits = await callHandler('1028');
+  assert.equal(resDigits.status, 200);
+  assert.equal(resDigits.body.invoice.invoiceNumber, 'CA-1028');
+
+  // 5. Typo with missing 'A' for CA-1029 (C-1029) -> Auto-resolves to CA-1029!
+  const resTypo1029 = await callHandler('C-1029');
+  assert.equal(resTypo1029.status, 200);
+  assert.equal(resTypo1029.body.invoice.invoiceNumber, 'CA-1029');
+
+  // 6. Non-existent query (9999) -> Must return 404 with nearest matches sorted by proximity!
+  const resNearest = await callHandler('9999');
+  assert.equal(resNearest.status, 404);
+  assert.ok(resNearest.body.nearestMatches && resNearest.body.nearestMatches.length > 0);
+  assert.ok(resNearest.body.nearestMatches[0].distance < 9000);
+});
