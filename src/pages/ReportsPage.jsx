@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import ReceiptModal from '../components/pos/ReceiptModal';
+import { downloadExportFile } from '../utils/exportDownloader';
 
 // Native browser CSV export utility (zero dependencies, instant & reliable)
 function exportToCsv(filename, rows) {
@@ -1228,28 +1229,33 @@ export default function ReportsPage() {
 
             <div className="flex items-center gap-2 self-start md:self-auto">
               <button
-                onClick={() =>
-                  exportToCsv(
-                    `curated_art_chart_of_accounts_${new Date().toISOString().slice(0, 10)}.csv`,
-                    generalAccounts.map((a) => ({
-                      Name: a.name,
-                      Group: a.accountGroup,
-                      Type: a.accountType,
-                      Section: a.section,
-                      OpeningBalance: a.openingBalance,
-                      CurrentBalance: a.currentBalance,
-                      GSTIN: a.gstin || '',
-                      PAN: a.panNo || '',
-                      Mobile: a.mobile || '',
-                      State: a.state || '',
-                      Status: a.isActive ? 'ACTIVE' : 'INACTIVE',
-                    }))
-                  )
-                }
+                type="button"
+                onClick={async () => {
+                  await downloadExportFile(
+                    '/api/export/customers?format=xlsx',
+                    'GOKUL_TRADERS-Account_List.xlsx',
+                    token
+                  );
+                }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+                title="Export complete 25-category Master Account List to Excel (.xlsx)"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>Export Ledger CSV</span>
+                <span>Export Master Account List (.xlsx)</span>
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await downloadExportFile(
+                    '/api/export/customers?format=csv',
+                    'GOKUL_TRADERS-Account_List.csv',
+                    token
+                  );
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 font-semibold text-xs transition-colors shadow-md cursor-pointer"
+                title="Export complete 25-category Master Account List to CSV (.csv)"
+              >
+                <span>CSV</span>
               </button>
             </div>
           </div>
