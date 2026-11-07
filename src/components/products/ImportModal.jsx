@@ -158,10 +158,39 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
       for (let i = 0; i < Math.min(25, rows.length); i++) {
         const candidate = (rows[i] || []).map((c) => String(c || '').trim().toLowerCase());
         const nonEmpty = candidate.filter((c) => c.length > 0);
-        if (nonEmpty.length < 3) continue; // Skip single titles or empty metadata rows
+        if (nonEmpty.length < 2) continue; // Skip single titles or empty metadata rows
 
-        const hasName = candidate.some((c) => c.includes('product') || (c.includes('name') && !c.includes('file')) || c === 'item' || c.includes('particular') || c.includes('desc'));
-        const hasOther = candidate.some((c) => c.includes('cost') || c.includes('price') || c.includes('rate') || c.includes('stock') || c.includes('group') || c.includes('category') || c.includes('code') || c.includes('sku') || c.includes('ordinal') || c.includes('sale') || c.includes('mrp'));
+        const hasName = candidate.some(
+          (c) =>
+            c.includes('product') ||
+            (c.includes('name') && !c.includes('file')) ||
+            c.includes('item') ||
+            c.includes('particular') ||
+            c.includes('desc') ||
+            c.includes('title') ||
+            c.includes('article') ||
+            c.includes('goods') ||
+            c.includes('品名') ||
+            c.includes('商品')
+        );
+        const hasOther = candidate.some(
+          (c) =>
+            c.includes('cost') ||
+            c.includes('price') ||
+            c.includes('rate') ||
+            c.includes('stock') ||
+            c.includes('group') ||
+            c.includes('category') ||
+            c.includes('code') ||
+            c.includes('sku') ||
+            c.includes('ordinal') ||
+            c.includes('sale') ||
+            c.includes('mrp') ||
+            c.includes('qty') ||
+            c.includes('quntity') ||
+            c.includes('quantity') ||
+            c.includes('count')
+        );
 
         if (hasName && hasOther) {
           headerRowIndex = i;
@@ -209,20 +238,21 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
           return;
         }
 
-        if (colName === -1 && (h === 'item' || h.includes('product') || (h.includes('name') && !h.includes('file')) || h.includes('particulars'))) {
-          colName = idx;
-        } else if (colSku === -1 && (h === 'item code' || h.includes('sku') || h.includes('ordinal') || (h.includes('code') && !h.includes('main')))) {
+        // Match SKU/Item Code first so that 'item code' or 'code' assigns to SKU, not name
+        if (colSku === -1 && (h === 'item code' || h.includes('sku') || h.includes('ordinal') || (h.includes('code') && !h.includes('main')))) {
           colSku = idx;
+        } else if (colName === -1 && (h.includes('product') || (h.includes('name') && !h.includes('file')) || h.includes('item') || h.includes('particular') || h.includes('title') || h.includes('desc') || h.includes('article') || h.includes('goods') || h.includes('品名') || h.includes('商品'))) {
+          colName = idx;
         } else if (colCategory === -1 && (h.includes('group') || h.includes('category') || h.includes('cat') || h.includes('type') || h.includes('department'))) {
           colCategory = idx;
         } else if (colBarcode === -1 && (h.includes('bar') || h.includes('ean') || h.includes('upc'))) {
           colBarcode = idx;
         } else if (colPurchase === -1 && (h.includes('cost') || h.includes('purchase') || h.includes('buy price'))) {
           colPurchase = idx;
-        } else if (colSelling === -1 && (h.includes('sale') || h.includes('sell') || h.includes('rate') || h === 'price' || (h.includes('price') && !h.includes('cost')) || subH.includes('mrp'))) {
-          colSelling = idx;
         } else if (colMrp === -1 && (h.includes('mrp') || subH.includes('mrp'))) {
           colMrp = idx;
+        } else if (colSelling === -1 && (h.includes('sale') || h.includes('sell') || h.includes('rate') || h === 'price' || (h.includes('price') && !h.includes('cost')) || subH.includes('mrp'))) {
+          colSelling = idx;
         } else if (colStock === -1 && (h.includes('quntity') || h.includes('stock') || h.includes('closing') || h.includes('qty') || h.includes('quantity') || h.includes('balance') || h.includes('count'))) {
           colStock = idx;
         } else if (colHsn === -1 && (h.includes('hsn') || h.includes('sac'))) {
@@ -232,8 +262,23 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         }
       });
 
-      // Default name to column 0 if still not detected
-      if (colName === -1 && headers.length > 0) colName = 0;
+      // Smart column name fallback if not detected from headers
+      if (colName === -1 && headers.length > 0) {
+        let bestCol = -1;
+        for (let c = 0; c < headers.length; c++) {
+          if (c === colSku || c === colPurchase || c === colStock || c === colMrp || c === colBarcode) continue;
+          let textMatches = 0;
+          for (let r = headerRowIndex + 1; r < Math.min(headerRowIndex + 5, rows.length); r++) {
+            const val = String(rows[r]?.[c] || '').trim();
+            if (val && isNaN(Number(val)) && val.length >= 3) textMatches++;
+          }
+          if (textMatches >= 2) {
+            bestCol = c;
+            break;
+          }
+        }
+        colName = bestCol !== -1 ? bestCol : (headers.length > 1 ? 1 : 0);
+      }
 
       // 4. Parse data rows
       const parsed = [];
@@ -294,15 +339,15 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
             catVal = 'PLANT';
           } else if (upperName.startsWith('WC ') || upperName.includes('CLOCK')) {
             catVal = 'WALL CLOCK';
-          } else if (upperName.startsWith('WP ') || upperName.includes('WALL ART') || upperName.includes('FRAME') || upperName.includes('PAINTING')) {
+          } else if (upperName.startsWith('WP') || upperName.includes('WALL ART') || upperName.includes('FRAME') || upperName.includes('PAINTING')) {
             catVal = 'WALL PIC';
           } else if (upperName.includes('STONE') || upperName.includes('PEBBLES') || upperName.includes('CHIPS')) {
             catVal = 'STONE';
-          } else if (upperName.startsWith('SW ') || upperName.includes('SWIMMING') || upperName.includes('GOGGLE')) {
+          } else if (upperName.startsWith('SW') || upperName.includes('SWIMMING') || upperName.includes('GOGGLE')) {
             catVal = 'SWIMMING';
-          } else if (upperName.startsWith('PF ') || upperName.includes('PHOTOFRAME')) {
+          } else if (upperName.startsWith('PF') || upperName.includes('PHOTOFRAME')) {
             catVal = 'PHOTOFRAME';
-          } else if (upperName.startsWith('NL ') || upperName.includes('NIGHTLAMP') || upperName.includes('LAMP')) {
+          } else if (upperName.startsWith('NL') || upperName.includes('NIGHTLAMP') || upperName.includes('LAMP')) {
             catVal = 'NIGHTLAMP';
           } else if (upperName.includes('SPORTS') || upperName.includes('BASKETBALL')) {
             catVal = 'SPORTS';
@@ -317,7 +362,12 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
           } else if (upperName.includes('CRYSTAL FISH')) {
             catVal = 'CRYSTAL FISH';
           } else {
-            catVal = 'SHOWPIC';
+            const upperFile = sourceName.toUpperCase();
+            if (upperFile.includes('WP') || upperFile.includes('WALL PIC')) catVal = 'WALL PIC';
+            else if (upperFile.includes('SHP')) catVal = 'SHOWPIC';
+            else if (upperFile.includes('FL')) catVal = 'FLOWER';
+            else if (upperFile.includes('FP')) catVal = 'FLOWER POT';
+            else catVal = 'SHOWPIC';
           }
         }
 
@@ -326,7 +376,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         let mrpVal = colMrp !== -1 ? parseFloat(String(row[colMrp]).replace(/[^0-9.-]+/g, '')) || 0 : 0;
 
         // Smart Price Extraction: Real MRP is A<Number> * 3. If no A<Number>, MRP is 0.
-        if (mrpVal <= 0 && sellVal <= 0) {
+        if (mrpVal <= 0) {
           const matches = [...nameVal.matchAll(/\bA(\d{2,6})\b/gi)];
           if (matches && matches.length > 0) {
             const nums = matches.map((m) => parseInt(m[1], 10)).filter((n) => n >= 20);
