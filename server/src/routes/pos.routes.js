@@ -28,7 +28,7 @@ router.get('/search', optionalAuth, async (req, res) => {
           ...catFilter,
         },
         include: { category: { select: { id: true, name: true } } },
-        take: 100,
+        take: 250,
         orderBy: [
           { currentStock: 'desc' },
           { name: 'asc' },
@@ -65,7 +65,7 @@ router.get('/search', optionalAuth, async (req, res) => {
         ],
       },
       include: { category: { select: { id: true, name: true } } },
-      take: 80,
+      take: 150,
       orderBy: [
         { currentStock: 'desc' },
         { name: 'asc' },

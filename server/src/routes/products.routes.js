@@ -566,18 +566,37 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
           barcode = generateEan13Barcode(barcodeSeq);
         }
 
-        // Category resolution
+        // Category resolution mapping to canonical showroom categories
         let categoryId = null;
-        const catName = row.category ? row.category.trim() : 'General';
-        if (catName) {
-          const lowerCat = catName.toLowerCase();
-          if (categoryMap.has(lowerCat)) {
-            categoryId = categoryMap.get(lowerCat);
-          } else {
-            const cat = await prisma.category.create({ data: { name: catName } });
-            categoryId = cat.id;
-            categoryMap.set(lowerCat, categoryId);
-          }
+        let catName = row.category ? row.category.trim() : 'SHOWPIC';
+        const upperCat = catName.toUpperCase();
+        if (upperCat.includes('CRYSTAL FISH')) catName = 'CRYSTAL FISH';
+        else if (upperCat.includes('FLOWER POT') || upperCat.includes('POT') || upperCat.includes('PLANTER')) catName = 'FLOWER POT';
+        else if (upperCat.includes('FLOWER') || upperCat.includes('GRASS')) catName = 'FLOWER';
+        else if (upperCat.includes('PLANT') || upperCat.includes('BONSAI') || upperCat.includes('BAMBOO')) catName = 'PLANT';
+        else if (upperCat.includes('WALL CLOCK') || upperCat.includes('CLOCK')) catName = 'WALL CLOCK';
+        else if (upperCat.includes('WALL PIC') || upperCat.includes('PAINTING') || upperCat.includes('CANVAS') || upperCat.includes('WALL ART')) catName = 'WALL PIC';
+        else if (upperCat.includes('SHOWPIC') || upperCat.includes('SHOW') || upperCat.includes('SCULPTURE') || upperCat.includes('STATUE') || upperCat.includes('IDOL') || upperCat.includes('FOUNTAIN')) catName = 'SHOWPIC';
+        else if (upperCat.includes('STONE') || upperCat.includes('PEBBLE') || upperCat.includes('CHIP')) catName = 'STONE';
+        else if (upperCat.includes('SWIM')) catName = 'SWIMMING';
+        else if (upperCat.includes('PHOTOFRAME') || upperCat.includes('PHOTO FRAME')) catName = 'PHOTOFRAME';
+        else if (upperCat.includes('NIGHTLAMP') || upperCat.includes('LAMP')) catName = 'NIGHTLAMP';
+        else if (upperCat.includes('SPORT') || upperCat.includes('BALL')) catName = 'SPORTS';
+        else if (upperCat.includes('SCOOTER')) catName = 'SCOOTER';
+        else if (upperCat.includes('RACKET')) catName = 'RACKET';
+        else if (upperCat.includes('SCKETING') || upperCat.includes('SKATING')) catName = 'SCKETING';
+        else if (upperCat.includes('SKETCH')) catName = 'SKETCHING';
+        else if (upperCat.includes('THORMOS') || upperCat.includes('THERMOS')) catName = 'THORMOS';
+        else if (upperCat.includes('METAL STAND') || upperCat.includes('STAND')) catName = 'METAL STAND';
+        else catName = 'SHOWPIC';
+
+        const lowerCat = catName.toLowerCase();
+        if (categoryMap.has(lowerCat)) {
+          categoryId = categoryMap.get(lowerCat);
+        } else {
+          const cat = await prisma.category.create({ data: { name: catName } });
+          categoryId = cat.id;
+          categoryMap.set(lowerCat, categoryId);
         }
 
         // Handle embedded photo if base64 data URL provided
@@ -604,25 +623,32 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
         const purchasePrice = (isAdmin && row.purchasePrice) ? parseFloat(row.purchasePrice) : 0.0;
         const sellingPrice = row.sellingPrice ? parseFloat(row.sellingPrice) : 0.0;
 
-        // If product already exists with this SKU, update it with the new Excel data (stock, prices, unit, image)
-        const dupSku = await prisma.product.findUnique({ where: { sku } });
-        if (dupSku) {
+        // If product already exists with this SKU or Name, update it with the new Excel data (stock, prices, unit, image)
+        const dupProd = await prisma.product.findFirst({
+          where: {
+            OR: [
+              { sku },
+              { name: row.name.trim() },
+            ],
+          },
+        });
+        if (dupProd) {
           const updateData = {
             name: row.name.trim(),
             currentStock,
-            unit: row.unit ? row.unit.trim().toUpperCase() : dupSku.unit,
+            unit: row.unit ? row.unit.trim().toUpperCase() : dupProd.unit,
           };
           const effectivePrice = row.mrp !== undefined ? parseFloat(row.mrp) : sellingPrice;
           updateData.mrp = effectivePrice;
           updateData.sellingPrice = effectivePrice;
           if (isAdmin && purchasePrice > 0) updateData.purchasePrice = purchasePrice;
           if (imageUrl) updateData.imageUrl = imageUrl;
-          if (row.gstRate !== undefined) updateData.gstRate = parseFloat(row.gstRate);
+          updateData.gstRate = 0.0;
           if (row.hsnCode) updateData.hsnCode = String(row.hsnCode).trim();
           if (categoryId) updateData.categoryId = categoryId;
 
           const updatedProd = await prisma.product.update({
-            where: { id: dupSku.id },
+            where: { id: dupProd.id },
             data: updateData,
           });
 

@@ -256,16 +256,69 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         const skuVal = rawSku || '';
         const barcodeVal = colBarcode !== -1 ? String(row[colBarcode] || '').replace(/['"\s]/g, '') : '';
         
-        // Smart category resolution with name prefix detection
-        let catVal = colCategory !== -1 ? String(row[colCategory] || '').trim() : '';
-        if (!catVal || catVal === 'General') {
-          if (nameVal.startsWith('SHP')) catVal = 'Showpieces & Sculptures';
-          else if (nameVal.startsWith('FL')) catVal = 'Artificial Flowers';
-          else if (nameVal.startsWith('FP')) catVal = 'Flower Pots & Planters';
-          else if (nameVal.startsWith('PL')) catVal = 'Artificial Plants';
-          else if (nameVal.startsWith('WC')) catVal = 'Wall Clocks';
-          else if (nameVal.startsWith('WP')) catVal = 'Wall Art & Paintings';
-          else catVal = 'General';
+        // Smart category resolution mapping to canonical showroom categories
+        const resolveCleanCategory = (raw) => {
+          const u = String(raw || '').trim().toUpperCase();
+          if (!u || u === 'GENERAL') return '';
+          if (u.includes('CRYSTAL FISH')) return 'CRYSTAL FISH';
+          if (u.includes('FLOWER POT') || u.includes('POT') || u.includes('PLANTER') || u.includes('VASE')) return 'FLOWER POT';
+          if (u.includes('FLOWER') || u.includes('GRASS')) return 'FLOWER';
+          if (u.includes('PLANT') || u.includes('BONSAI') || u.includes('BAMBOO')) return 'PLANT';
+          if (u.includes('WALL CLOCK') || u.includes('CLOCK')) return 'WALL CLOCK';
+          if (u.includes('WALL PIC') || u.includes('PAINTING') || u.includes('CANVAS') || u.includes('WALL ART')) return 'WALL PIC';
+          if (u.includes('SHOWPIC') || u.includes('SHOW') || u.includes('SCULPTURE') || u.includes('STATUE') || u.includes('IDOL') || u.includes('FOUNTAIN')) return 'SHOWPIC';
+          if (u.includes('STONE') || u.includes('PEBBLE') || u.includes('CHIP')) return 'STONE';
+          if (u.includes('SWIM')) return 'SWIMMING';
+          if (u.includes('PHOTOFRAME') || u.includes('PHOTO FRAME')) return 'PHOTOFRAME';
+          if (u.includes('NIGHTLAMP') || u.includes('LAMP')) return 'NIGHTLAMP';
+          if (u.includes('SPORT') || u.includes('BALL')) return 'SPORTS';
+          if (u.includes('SCOOTER')) return 'SCOOTER';
+          if (u.includes('RACKET')) return 'RACKET';
+          if (u.includes('SCKETING') || u.includes('SKATING')) return 'SCKETING';
+          if (u.includes('SKETCH')) return 'SKETCHING';
+          if (u.includes('THORMOS') || u.includes('THERMOS')) return 'THORMOS';
+          if (u.includes('METAL STAND') || u.includes('STAND')) return 'METAL STAND';
+          return u;
+        };
+
+        let catVal = colCategory !== -1 ? resolveCleanCategory(row[colCategory]) : '';
+        if (!catVal) {
+          const upperName = nameVal.toUpperCase();
+          if (upperName.startsWith('SHP') || upperName.includes('SHOWPIECE') || upperName.includes('FOUNTAIN') || upperName.includes('IDOL') || upperName.includes('GANESHA') || upperName.includes('BASKET')) {
+            catVal = 'SHOWPIC';
+          } else if (upperName.startsWith('FL ') || upperName.startsWith('FLOWER') || upperName.includes('ARTIFICIAL GRASS') || upperName.includes('ARTFICIAL GRASS')) {
+            catVal = 'FLOWER';
+          } else if (upperName.startsWith('FP ') || upperName.includes('POT') || upperName.includes('PLANTER') || upperName.includes('VASE')) {
+            catVal = 'FLOWER POT';
+          } else if (upperName.startsWith('PL ') || upperName.includes('PLANT') || upperName.includes('BAMBOO') || upperName.includes('BONSAI')) {
+            catVal = 'PLANT';
+          } else if (upperName.startsWith('WC ') || upperName.includes('CLOCK')) {
+            catVal = 'WALL CLOCK';
+          } else if (upperName.startsWith('WP ') || upperName.includes('WALL ART') || upperName.includes('FRAME') || upperName.includes('PAINTING')) {
+            catVal = 'WALL PIC';
+          } else if (upperName.includes('STONE') || upperName.includes('PEBBLES') || upperName.includes('CHIPS')) {
+            catVal = 'STONE';
+          } else if (upperName.startsWith('SW ') || upperName.includes('SWIMMING') || upperName.includes('GOGGLE')) {
+            catVal = 'SWIMMING';
+          } else if (upperName.startsWith('PF ') || upperName.includes('PHOTOFRAME')) {
+            catVal = 'PHOTOFRAME';
+          } else if (upperName.startsWith('NL ') || upperName.includes('NIGHTLAMP') || upperName.includes('LAMP')) {
+            catVal = 'NIGHTLAMP';
+          } else if (upperName.includes('SPORTS') || upperName.includes('BASKETBALL')) {
+            catVal = 'SPORTS';
+          } else if (upperName.includes('SCOOTER')) {
+            catVal = 'SCOOTER';
+          } else if (upperName.includes('RACKET')) {
+            catVal = 'RACKET';
+          } else if (upperName.includes('THORMOS') || upperName.includes('THERMOS')) {
+            catVal = 'THORMOS';
+          } else if (upperName.includes('METAL STAND')) {
+            catVal = 'METAL STAND';
+          } else if (upperName.includes('CRYSTAL FISH')) {
+            catVal = 'CRYSTAL FISH';
+          } else {
+            catVal = 'SHOWPIC';
+          }
         }
 
         const purVal = rawCost ? parseFloat(rawCost.replace(/[^0-9.-]+/g, '')) || 0 : 0;
@@ -307,7 +360,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
           mrp: Math.max(0, mrpVal),
           currentStock: stockVal,
           hsnCode: hsnVal || '9701',
-          gstRate: gstVal,
+          gstRate: 0.0,
           imageBase64: imageBase64 || undefined,
         });
       }

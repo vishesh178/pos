@@ -247,27 +247,13 @@ export default function POSPage() {
   const performSearch = (q = searchQuery, catId = activeCategory) => {
     setLoadingSearch(true);
     const params = new URLSearchParams();
+    if (q && q.trim()) params.set('q', q.trim());
+    if (catId && catId !== 'all') params.set('categoryId', catId);
 
-    let url = '';
-    if (catId && catId !== 'all') {
-      if (q && q.trim()) params.set('search', q.trim());
-      params.set('categoryId', catId);
-      params.set('status', 'ACTIVE');
-      url = `/api/products?${params.toString()}`;
-    } else {
-      if (q && q.trim()) params.set('q', q.trim());
-      url = `/api/pos/search?${params.toString()}`;
-    }
-
-    fetch(url)
+    fetch(`/api/pos/search?${params.toString()}`)
       .then((r) => r.json())
       .then((items) => {
-        const productList = Array.isArray(items)
-          ? items
-          : Array.isArray(items?.products)
-          ? items.products
-          : [];
-        setSearchResults(productList);
+        setSearchResults(Array.isArray(items) ? items : []);
         setLoadingSearch(false);
       })
       .catch((err) => {
@@ -278,6 +264,7 @@ export default function POSPage() {
 
   const handleCategorySelect = (catId) => {
     setActiveCategory(catId);
+    setSearchResults([]);
     performSearch(searchQuery, catId);
   };
 
