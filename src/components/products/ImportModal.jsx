@@ -499,7 +499,10 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
     setError('');
     setResult(null);
 
-    const BATCH_SIZE = 250;
+    // If rows contain base64 photos, use smaller chunks (8 items) to prevent exceeding HTTP payload limits.
+    // For text-only catalogs (e.g. 9,700 items), use 250 items for rapid bulk insertion.
+    const hasImages = parsedRows.some((r) => !!r.imageBase64);
+    const BATCH_SIZE = hasImages ? 8 : 250;
     let totalImported = 0;
     let totalErrors = 0;
 
