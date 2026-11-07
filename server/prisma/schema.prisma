@@ -83,8 +83,8 @@ model Product {
   mrp                Float               @default(0.0)
   gstRate            Float               @default(18.0)
   hsnCode            String              @default("9701")
-  currentStock       Int                 @default(0)
-  minStock           Int                 @default(5)
+  currentStock       Float               @default(0.0)
+  minStock           Float               @default(5.0)
   unit               String              @default("PCS")
   supplierId         String?
   supplier           Supplier?           @relation(fields: [supplierId], references: [id])
@@ -200,7 +200,7 @@ model InvoiceItem {
   productName    String
   sku            String
   hsnCode        String
-  quantity       Int
+  quantity       Float
   unitPrice      Float
   mrp            Float
   discountAmount Float    @default(0.0)
@@ -249,7 +249,7 @@ model SalesReturnItem {
   salesReturn   SalesReturn @relation(fields: [salesReturnId], references: [id], onDelete: Cascade)
   productId     String
   product       Product     @relation(fields: [productId], references: [id])
-  quantity      Int
+  quantity      Float
   refundAmount  Float
   condition     String      @default("RESTOCKABLE") // RESTOCKABLE, DAMAGED
 }
@@ -279,7 +279,7 @@ model PurchaseOrderItem {
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   productId       String
   product         Product       @relation(fields: [productId], references: [id])
-  quantity        Int
+  quantity        Float
   unitCost        Float
   taxRate         Float         @default(18.0)
   totalAmount     Float
@@ -315,7 +315,7 @@ model PurchaseBillItem {
   purchaseBill   PurchaseBill @relation(fields: [purchaseBillId], references: [id], onDelete: Cascade)
   productId      String
   product        Product      @relation(fields: [productId], references: [id])
-  quantity       Int
+  quantity       Float
   unitCost       Float
   taxRate        Float
   totalAmount    Float
@@ -326,9 +326,9 @@ model StockMovement {
   productId     String
   product       Product  @relation(fields: [productId], references: [id])
   type          String // SALE, PURCHASE, RETURN_INWARD, DAMAGE_OUTWARD, ADJUSTMENT_ADD, ADJUSTMENT_SUBTRACT, OPENING
-  quantity      Int
+  quantity      Float
   unitCost      Float?
-  balanceAfter  Int
+  balanceAfter  Float
   referenceType String? // INVOICE, PURCHASE_BILL, RETURN, MANUAL
   referenceId   String?
   notes         String?
@@ -425,7 +425,7 @@ model EstimateItem {
   productName    String
   sku            String
   hsnCode        String
-  quantity       Int
+  quantity       Float
   unitPrice      Float
   mrp            Float
   discountAmount Float    @default(0.0)

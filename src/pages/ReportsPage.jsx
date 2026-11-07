@@ -635,7 +635,7 @@ export default function ReportsPage() {
                             </td>
                           )}
                           <td className="px-4 py-3 text-right font-semibold text-stone-200">
-                            ₹{p.sellingPrice.toFixed(2)}
+                            ₹{(p.mrp || p.sellingPrice).toFixed(2)}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span

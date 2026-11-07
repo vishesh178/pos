@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Search,
   ShoppingCart,
@@ -130,42 +130,147 @@ export default function POSPage() {
   const [isEstimateModalOpen, setIsEstimateModalOpen] = useState(false);
   const [estimateSubmitting, setEstimateSubmitting] = useState(false);
 
+  // Bill Discount Mode: 'rupee' or 'percent'
+  const [billDiscountMode, setBillDiscountMode] = useState('rupee');
+  const [billDiscountPercent, setBillDiscountPercent] = useState('');
+
+  // Item Discount Modes: productId -> 'rupee' | 'percent'
+  const [itemDiscountModes, setItemDiscountModes] = useState({});
+  const [itemDiscountPercents, setItemDiscountPercents] = useState({});
+
+  // Recalculate bill discount in rupees when subtotal changes if in percent mode
+  useEffect(() => {
+    if (billDiscountMode === 'percent' && billDiscountPercent !== '') {
+      const pct = parseFloat(billDiscountPercent) || 0;
+      const calculated = Math.round(((totals.subtotal * pct) / 100) * 100) / 100;
+      setInvoiceDiscount(calculated);
+    }
+  }, [totals.subtotal, billDiscountMode, billDiscountPercent]);
+
+  // Keep percentage item discounts in sync if item quantity or unit price changes
+  useEffect(() => {
+    cart.forEach((item) => {
+      if (itemDiscountModes[item.productId] === 'percent') {
+        const pctStr = itemDiscountPercents[item.productId];
+        if (pctStr !== undefined && pctStr !== '') {
+          const pct = parseFloat(pctStr) || 0;
+          const itemTotal = item.unitPrice * item.quantity;
+          const calculated = Math.round(((itemTotal * pct) / 100) * 100) / 100;
+          if (item.discountAmount !== calculated) {
+            updateItemDiscount(item.productId, calculated);
+          }
+        }
+      }
+    });
+  }, [cart, itemDiscountModes, itemDiscountPercents]);
+
+  const handleBillDiscountModeChange = (mode) => {
+    if (mode === billDiscountMode) return;
+    setBillDiscountMode(mode);
+    if (mode === 'percent') {
+      const currentPct =
+        totals.subtotal > 0 && invoiceDiscount > 0
+          ? Math.round(((invoiceDiscount / totals.subtotal) * 100) * 100) / 100
+          : '';
+      setBillDiscountPercent(currentPct !== '' ? currentPct.toString() : '');
+    } else {
+      setBillDiscountPercent('');
+    }
+  };
+
+  const handleBillDiscountValueChange = (val) => {
+    if (billDiscountMode === 'percent') {
+      setBillDiscountPercent(val);
+      const pct = parseFloat(val) || 0;
+      const calculated = Math.round(((totals.subtotal * pct) / 100) * 100) / 100;
+      setInvoiceDiscount(calculated);
+    } else {
+      setInvoiceDiscount(parseFloat(val) || 0);
+    }
+  };
+
+  const handleItemDiscountModeToggle = (item) => {
+    const currentMode = itemDiscountModes[item.productId] || 'rupee';
+    const nextMode = currentMode === 'rupee' ? 'percent' : 'rupee';
+    setItemDiscountModes((prev) => ({ ...prev, [item.productId]: nextMode }));
+
+    const itemTotal = item.unitPrice * item.quantity;
+    if (nextMode === 'percent') {
+      const currentDisc = item.discountAmount || 0;
+      const pct =
+        itemTotal > 0 && currentDisc > 0
+          ? Math.round(((currentDisc / itemTotal) * 100) * 100) / 100
+          : '';
+      setItemDiscountPercents((prev) => ({
+        ...prev,
+        [item.productId]: pct ? pct.toString() : '',
+      }));
+    } else {
+      setItemDiscountPercents((prev) => ({ ...prev, [item.productId]: '' }));
+    }
+  };
+
+  const handleItemDiscountValueChange = (item, val) => {
+    const mode = itemDiscountModes[item.productId] || 'rupee';
+    if (mode === 'percent') {
+      setItemDiscountPercents((prev) => ({ ...prev, [item.productId]: val }));
+      const pct = parseFloat(val) || 0;
+      const itemTotal = item.unitPrice * item.quantity;
+      const calculated = Math.round(((itemTotal * pct) / 100) * 100) / 100;
+      updateItemDiscount(item.productId, calculated);
+    } else {
+      updateItemDiscount(item.productId, parseFloat(val) || 0);
+    }
+  };
+
   const searchInputRef = useRef(null);
 
   // Load categories and initial products
   useEffect(() => {
     fetch('/api/products/categories')
       .then((r) => r.json())
-      .then((cats) => setCategories(cats))
-      .catch((e) => console.error(e));
+      .then((cats) => setCategories(Array.isArray(cats) ? cats : []))
+      .catch((e) => console.error('Failed to load categories:', e));
 
-    performSearch('');
+    performSearch('', 'all');
   }, []);
 
   // Auto-refresh product stock when inventory changes anywhere in the app
   useEffect(() => {
     const handleInventoryChange = () => {
-      performSearch(searchQuery);
+      performSearch(searchQuery, activeCategory);
     };
     window.addEventListener('inventory-updated', handleInventoryChange);
     return () => window.removeEventListener('inventory-updated', handleInventoryChange);
-  }, [searchQuery]);
+  }, [searchQuery, activeCategory]);
 
-  const performSearch = (q) => {
+  const performSearch = (q = searchQuery, catId = activeCategory) => {
     setLoadingSearch(true);
-    fetch(`/api/pos/search?q=${encodeURIComponent(q)}`)
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (catId && catId !== 'all') params.set('categoryId', catId);
+
+    fetch(`/api/pos/search?${params.toString()}`)
       .then((r) => r.json())
       .then((items) => {
-        setSearchResults(items);
+        setSearchResults(Array.isArray(items) ? items : []);
         setLoadingSearch(false);
       })
-      .catch(() => setLoadingSearch(false));
+      .catch((err) => {
+        console.error('POS search failed:', err);
+        setLoadingSearch(false);
+      });
+  };
+
+  const handleCategorySelect = (catId) => {
+    setActiveCategory(catId);
+    performSearch(searchQuery, catId);
   };
 
   const handleSearchChange = (e) => {
     const val = e.target.value;
     setSearchQuery(val);
-    performSearch(val);
+    performSearch(val, activeCategory);
   };
 
   const fetchCustomerDirectory = async (query = '') => {
@@ -541,9 +646,23 @@ export default function POSPage() {
   const tenderNum = parseFloat(cashTendered) || 0;
   const changeDue = Math.max(0, tenderNum - activePaidAmount);
 
-  const filteredProducts = activeCategory === 'all'
-    ? searchResults
-    : searchResults.filter((p) => p.categoryId === activeCategory);
+  const totalCatalogCount = useMemo(() => {
+    return categories.reduce((sum, c) => sum + (c._count?.products || 0), 0);
+  }, [categories]);
+
+  const filteredProducts = useMemo(() => {
+    // Available products (> 0 in stock) show up first, highest stock first
+    return [...searchResults].sort((a, b) => {
+      const aStock = parseFloat(a.currentStock) || 0;
+      const bStock = parseFloat(b.currentStock) || 0;
+      const aInStock = aStock > 0 ? 1 : 0;
+      const bInStock = bStock > 0 ? 1 : 0;
+      if (aInStock !== bInStock) {
+        return bInStock - aInStock;
+      }
+      return bStock - aStock;
+    });
+  }, [searchResults]);
 
   return (
     <div className="h-[calc(100dvh-150px)] md:h-[calc(100vh-100px)] flex flex-col md:flex-row gap-4 md:gap-5 select-none">
@@ -608,7 +727,7 @@ export default function POSPage() {
           <button
             onClick={() => {
               setSearchQuery('');
-              performSearch('');
+              performSearch('', activeCategory);
             }}
             title="Reset search"
             className="p-2.5 rounded-xl bg-stone-800 text-stone-400 hover:text-stone-200 transition-colors"
@@ -620,26 +739,26 @@ export default function POSPage() {
         {/* Category Pills */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none shrink-0 mb-3">
           <button
-            onClick={() => setActiveCategory('all')}
+            onClick={() => handleCategorySelect('all')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
               activeCategory === 'all'
-                ? 'bg-amber-500 text-stone-950'
+                ? 'bg-amber-500 text-stone-950 font-bold'
                 : 'bg-stone-950 text-stone-400 hover:text-stone-200 border border-stone-800'
             }`}
           >
-            All Pieces ({searchResults.length})
+            All Pieces ({totalCatalogCount > 0 ? totalCatalogCount : searchResults.length})
           </button>
           {categories.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setActiveCategory(cat.id)}
+              onClick={() => handleCategorySelect(cat.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
                 activeCategory === cat.id
-                  ? 'bg-amber-500 text-stone-950'
+                  ? 'bg-amber-500 text-stone-950 font-bold'
                   : 'bg-stone-950 text-stone-400 hover:text-stone-200 border border-stone-800'
               }`}
             >
-              {cat.name}
+              {cat.name} ({cat._count?.products || 0})
             </button>
           ))}
         </div>
@@ -683,22 +802,19 @@ export default function POSPage() {
                     <div className="mt-3 pt-2 border-t border-stone-800/80 flex items-center justify-between">
                       <div>
                         <span className="text-sm font-bold text-amber-400 font-mono">
-                          ₹{p.sellingPrice.toFixed(2)}
+                          ₹{(p.mrp || p.sellingPrice).toFixed(2)}
                         </span>
-                        {p.mrp > p.sellingPrice && (
-                          <span className="text-[10px] text-stone-400 line-through font-mono ml-1.5">
-                            ₹{p.mrp}
-                          </span>
-                        )}
                       </div>
                       <span
-                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
-                          p.currentStock <= p.minStock
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded font-bold ${
+                          p.currentStock <= 0
                             ? 'bg-rose-950/80 text-rose-400 border border-rose-800'
-                            : 'bg-stone-900 text-stone-300'
+                            : p.currentStock <= p.minStock
+                            ? 'bg-amber-950/80 text-amber-400 border border-amber-800'
+                            : 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/80'
                         }`}
                       >
-                        {p.currentStock} in stock
+                        {Number((p.currentStock || 0).toFixed(2))} in stock
                       </span>
                     </div>
                   </div>
@@ -866,9 +982,18 @@ export default function POSPage() {
                 key={item.productId}
                 className="p-2.5 bg-stone-950/80 border border-stone-800/80 rounded-xl space-y-2"
               >
-                <div className="flex justify-between items-start">
-                  <div className="pr-2 flex-1">
-                    <h5 className="text-xs font-semibold text-stone-100 font-serif leading-tight">
+                <div className="flex gap-2.5 items-start">
+                  {/* Product Image Thumbnail */}
+                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-stone-900 border border-stone-800 shrink-0 flex items-center justify-center">
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.productName} className="w-full h-full object-cover" />
+                    ) : (
+                      <Package className="w-5 h-5 text-stone-500 stroke-1" />
+                    )}
+                  </div>
+
+                  <div className="pr-1 flex-1 min-w-0">
+                    <h5 className="text-xs font-semibold text-stone-100 font-serif leading-tight truncate">
                       {item.productName}
                     </h5>
                     <div className="flex items-center gap-2 mt-0.5 text-[10px] text-stone-400">
@@ -876,38 +1001,74 @@ export default function POSPage() {
                       <span>GST: {item.gstRate}%</span>
                     </div>
                   </div>
+
                   <button
                     onClick={() => removeFromCart(item.productId)}
-                    className="p-1 text-stone-400 hover:text-rose-400 transition-colors"
+                    className="p-1 text-stone-400 hover:text-rose-400 transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between pt-1">
-                  {/* Quantity Stepper */}
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-stone-900">
+                  {/* Quantity Stepper & Decimal Input */}
                   <div className="flex items-center border border-stone-700 rounded-lg overflow-hidden bg-stone-900">
                     <button
-                      onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                      className="px-2 py-1 text-stone-300 hover:bg-stone-800"
+                      onClick={() => updateQuantity(item.productId, Math.max(0, (parseFloat(item.quantity) || 1) - 1))}
+                      className="px-2 py-1 text-stone-300 hover:bg-stone-800 cursor-pointer"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="px-3 py-1 font-mono text-xs font-bold text-stone-100">
-                      {item.quantity}
-                    </span>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.001"
+                      value={item.quantity}
+                      onChange={(e) => updateQuantity(item.productId, e.target.value)}
+                      className="w-14 px-1 py-1 font-mono text-xs font-bold text-stone-100 text-center bg-transparent focus:outline-none"
+                    />
                     <button
-                      onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                      className="px-2 py-1 text-stone-300 hover:bg-stone-800"
+                      onClick={() => updateQuantity(item.productId, (parseFloat(item.quantity) || 0) + 1)}
+                      className="px-2 py-1 text-stone-300 hover:bg-stone-800 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
                   </div>
 
+                  {/* Item Discount Input with ₹ / % toggle */}
+                  <div
+                    className="flex items-center gap-1 bg-stone-900 border border-stone-700 rounded-lg px-2 py-1"
+                    title="Item-level discount (click ₹/% to switch mode)"
+                  >
+                    <Tag className="w-3 h-3 text-amber-500 shrink-0" />
+                    <button
+                      type="button"
+                      onClick={() => handleItemDiscountModeToggle(item)}
+                      className="px-1 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-amber-400 text-[10px] font-bold font-mono transition-colors cursor-pointer"
+                      title="Click to switch between ₹ flat and % percentage"
+                    >
+                      {itemDiscountModes[item.productId] === 'percent' ? '%' : '₹'}
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      max={itemDiscountModes[item.productId] === 'percent' ? 100 : undefined}
+                      step="any"
+                      value={
+                        itemDiscountModes[item.productId] === 'percent'
+                          ? (itemDiscountPercents[item.productId] ?? '')
+                          : (item.discountAmount || '')
+                      }
+                      onChange={(e) => handleItemDiscountValueChange(item, e.target.value)}
+                      placeholder="0"
+                      className="w-12 bg-transparent font-mono text-xs text-amber-400 text-right focus:outline-none"
+                    />
+                  </div>
+
                   {/* Price Calculation */}
                   <div className="text-right">
                     <div className="font-mono font-bold text-xs text-amber-400">
-                      ₹{(item.unitPrice * item.quantity).toFixed(2)}
+                      ₹{Math.max(0, item.unitPrice * item.quantity - (item.discountAmount || 0)).toFixed(2)}
                     </div>
                     <div className="text-[10px] text-stone-400 font-mono">
                       {item.mrp && item.mrp > item.unitPrice && (
@@ -939,20 +1100,56 @@ export default function POSPage() {
             <span className="font-mono">₹{totals.subtotal.toFixed(2)}</span>
           </div>
 
-          {/* Bill-level discount input */}
+          {/* Bill-level discount input with Rupee (₹) & Percentage (%) mode toggle */}
           <div className="flex justify-between items-center text-stone-400">
-            <span className="flex items-center gap-1">
-              <Tag className="w-3 h-3 text-amber-500" />
-              <span>Bill Discount (₹):</span>
+            <span className="flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-amber-500" />
+              <span>Bill Discount:</span>
+              <div className="inline-flex bg-stone-900 border border-stone-700 rounded-md p-0.5 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => handleBillDiscountModeChange('rupee')}
+                  className={`px-1.5 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                    billDiscountMode === 'rupee'
+                      ? 'bg-amber-500 text-stone-950 shadow-sm'
+                      : 'text-stone-400 hover:text-stone-200'
+                  }`}
+                  title="Flat Rupee discount"
+                >
+                  ₹
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBillDiscountModeChange('percent')}
+                  className={`px-1.5 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                    billDiscountMode === 'percent'
+                      ? 'bg-amber-500 text-stone-950 shadow-sm'
+                      : 'text-stone-400 hover:text-stone-200'
+                  }`}
+                  title="Percentage discount"
+                >
+                  %
+                </button>
+              </div>
             </span>
-            <input
-              type="number"
-              min="0"
-              value={invoiceDiscount || ''}
-              onChange={(e) => setInvoiceDiscount(parseFloat(e.target.value) || 0)}
-              placeholder="0"
-              className="w-20 px-2 py-0.5 bg-stone-950 border border-stone-700 rounded text-right font-mono text-xs text-amber-400"
-            />
+
+            <div className="flex items-center gap-1.5">
+              {billDiscountMode === 'percent' && invoiceDiscount > 0 && (
+                <span className="text-[10px] text-stone-400 font-mono">
+                  (-₹{invoiceDiscount.toFixed(2)})
+                </span>
+              )}
+              <input
+                type="number"
+                min="0"
+                max={billDiscountMode === 'percent' ? 100 : undefined}
+                step="any"
+                value={billDiscountMode === 'percent' ? billDiscountPercent : (invoiceDiscount || '')}
+                onChange={(e) => handleBillDiscountValueChange(e.target.value)}
+                placeholder="0"
+                className="w-20 px-2 py-0.5 bg-stone-950 border border-stone-700 rounded text-right font-mono text-xs text-amber-400 focus:outline-none focus:border-amber-500"
+              />
+            </div>
           </div>
 
           {!totals.isInterState ? (

@@ -14,9 +14,12 @@ import {
   Eye,
   ShoppingBag,
   ExternalLink,
+  FileSpreadsheet,
+  FileDown,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePOS } from '../context/POSContext';
+import { downloadExportFile } from '../utils/exportDownloader';
 import EstimateModal from '../components/pos/EstimateModal';
 
 export default function EstimatesPage() {
@@ -119,6 +122,11 @@ export default function EstimatesPage() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleQuickExcel = async (est, e) => {
+    e?.stopPropagation();
+    await downloadExportFile(`/api/estimates/${est.id}/export/excel`, `Estimate_${est.estimateNumber}.xlsx`, token);
   };
 
   // Quick WhatsApp share from table row
@@ -353,6 +361,15 @@ export default function EstimatesPage() {
                   <Share2 className="w-4 h-4" />
                 </button>
 
+                <button
+                  type="button"
+                  onClick={(e) => handleQuickExcel(est, e)}
+                  className="p-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-emerald-400 transition-colors cursor-pointer"
+                  title="Download Excel"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                </button>
+
                 {est.status !== 'CONVERTED' && (
                   <button
                     type="button"
@@ -477,6 +494,13 @@ export default function EstimatesPage() {
                           title="Send on WhatsApp"
                         >
                           <Share2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={(e) => handleQuickExcel(est, e)}
+                          className="p-1.5 rounded-lg bg-stone-800 text-emerald-400 hover:bg-stone-700 transition-colors cursor-pointer"
+                          title="Download Excel (.xlsx)"
+                        >
+                          <FileSpreadsheet className="w-3.5 h-3.5" />
                         </button>
                         {est.status !== 'CONVERTED' && (
                           <button

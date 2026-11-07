@@ -158,7 +158,7 @@ export default function WholesaleCatalogPage() {
         text += `   • SKU: ${it.sku}\n`;
         if (showWholesalePrice) text += `   • *Wholesale Rate:* ₹${effPrice.toLocaleString('en-IN')}\n`;
         if (showMrp && it.mrp) text += `   • Suggested MRP: ₹${it.mrp.toLocaleString('en-IN')}\n`;
-        if (showExactStock) text += `   • Ready Stock: ${it.currentStock} ${it.unit}\n`;
+        if (showExactStock) text += `   • Ready Stock: ${Number(it.currentStock.toFixed(2))} ${it.unit}\n`;
         else text += `   • Stock: In Ready Stock ✅\n`;
         if (it.imageUrl) text += `   • 🖼️ Photo: ${it.imageUrl}\n`;
         text += `\n`;
@@ -245,7 +245,7 @@ export default function WholesaleCatalogPage() {
               <span>${it.categoryName}</span>
             </div>
             <h3 style="font-size:14px;font-weight:bold;color:#fafaf9;margin:6px 0 4px 0;line-height:1.3;">${it.name}</h3>
-            <div style="font-size:11px;color:#78716c;">HSN: ${it.hsnCode} | GST: ${it.gstRate}% | Ready Stock: <strong style="color:#10b981;">${it.currentStock} ${it.unit}</strong></div>
+            <div style="font-size:11px;color:#78716c;">HSN: ${it.hsnCode} | GST: ${it.gstRate}% | Ready Stock: <strong style="color:#10b981;">${Number(it.currentStock.toFixed(2))} ${it.unit}</strong></div>
           </div>
           <div style="margin-top:14px;padding-top:10px;border-top:1px solid #292524;display:flex;justify-content:space-between;align-items:flex-end;">
             <div>
@@ -701,7 +701,7 @@ export default function WholesaleCatalogPage() {
                           {/* Available Stock Pill */}
                           <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-stone-950/90 border border-stone-700/80 backdrop-blur-md text-[10px] font-bold text-emerald-400 shadow-md print:bg-white print:text-black print:border-black">
                             {showExactStock
-                              ? `${item.currentStock} ${item.unit} In Stock`
+                              ? `${Number(item.currentStock.toFixed(2))} ${item.unit} In Stock`
                               : 'Ready Stock'}
                           </div>
                         </div>
@@ -849,7 +849,7 @@ export default function WholesaleCatalogPage() {
                         <td className="px-3 py-2.5 text-center">
                           <span className="font-bold text-emerald-400 print:text-black">
                             {showExactStock
-                              ? `${item.currentStock} ${item.unit}`
+                              ? `${Number(item.currentStock.toFixed(2))} ${item.unit}`
                               : 'Ready Stock'}
                           </span>
                         </td>
@@ -972,7 +972,7 @@ export default function WholesaleCatalogPage() {
                 <Package className="w-16 h-16 text-stone-700" />
               )}
               <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-stone-950/80 text-[10px] text-emerald-400 font-bold border border-stone-700">
-                {lightboxItem.currentStock} {lightboxItem.unit} Ready in Showroom
+                {Number(lightboxItem.currentStock.toFixed(2))} {lightboxItem.unit} Ready in Showroom
               </div>
             </div>
 
@@ -1022,7 +1022,7 @@ export default function WholesaleCatalogPage() {
               <div className="space-y-2">
                 <a
                   href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                    `Hi Curated Art, I want to book wholesale order for:\n*${lightboxItem.name}*\nSKU: ${lightboxItem.sku}\nWholesale Rate: ₹${getAdjustedPrice(lightboxItem.wholesalePrice)}\nAvailable Stock: ${lightboxItem.currentStock} ${lightboxItem.unit}\nPhoto: ${lightboxItem.imageUrl || 'N/A'}`
+                    `Hi Curated Art, I want to book wholesale order for:\n*${lightboxItem.name}*\nSKU: ${lightboxItem.sku}\nWholesale Rate: ₹${getAdjustedPrice(lightboxItem.wholesalePrice)}\nAvailable Stock: ${Number(lightboxItem.currentStock.toFixed(2))} ${lightboxItem.unit}\nPhoto: ${lightboxItem.imageUrl || 'N/A'}`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"

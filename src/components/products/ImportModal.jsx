@@ -272,32 +272,25 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         let sellVal = colSelling !== -1 ? parseFloat(String(row[colSelling]).replace(/[^0-9.-]+/g, '')) || 0 : 0;
         let mrpVal = colMrp !== -1 ? parseFloat(String(row[colMrp]).replace(/[^0-9.-]+/g, '')) || 0 : 0;
 
-        // Smart Price Extraction: If selling price / MRP is 0 or missing, detect A<Price> pattern in name
-        // e.g. "FL A115 FL-8" -> 115, "FP A1250 FLOWER POT" -> 1250, "SHP A1050 BK-183" -> 1050
-        if (sellVal <= 0 && mrpVal <= 0) {
-          const matchA = nameVal.match(/\bA(\d{2,6})\b/i);
-          const matchPrefix = nameVal.match(/^(?:FL|FP|PL|SHP|WC|WP|NL|PF|SW)\s+(\d{2,6})\b/i);
-          const matchSlash = nameVal.match(/\b(\d{2,6})\//);
-
-          if (matchA) {
-            sellVal = parseFloat(matchA[1]);
-          } else if (matchPrefix) {
-            sellVal = parseFloat(matchPrefix[1]);
-          } else if (matchSlash) {
-            sellVal = parseFloat(matchSlash[1]);
-          } else if (purVal > 0) {
-            sellVal = Math.round(purVal * 1.4); // Standard retail markup
+        // Smart Price Extraction: Real MRP is A<Number> * 3. If no A<Number>, MRP is 0.
+        if (mrpVal <= 0 && sellVal <= 0) {
+          const matches = [...nameVal.matchAll(/\bA(\d{2,6})\b/gi)];
+          if (matches && matches.length > 0) {
+            const nums = matches.map((m) => parseInt(m[1], 10)).filter((n) => n >= 20);
+            if (nums.length > 0) {
+              const code = Math.max(...nums);
+              mrpVal = code * 3;
+            }
           }
-        } else if (sellVal <= 0 && mrpVal > 0) {
-          sellVal = mrpVal;
         }
 
-        if (mrpVal <= 0) {
-          mrpVal = sellVal;
-        }
+        const effectiveMrp = mrpVal > 0 ? mrpVal : (sellVal > 0 ? sellVal : 0);
+        sellVal = effectiveMrp;
+        mrpVal = effectiveMrp;
 
-        // Clamp stock to >= 0 (negative closing stock in retail software means pending PO)
-        const stockVal = rawStock ? Math.max(0, parseInt(rawStock.replace(/[^0-9-]+/g, ''), 10) || 0) : 0;
+        // Clamp stock to >= 0 (supports decimal quantities like 2635.20, meters, sq ft, etc.)
+        const cleanStock = typeof rawStock === 'number' ? rawStock : String(rawStock || '').replace(/,/g, '').replace(/[^0-9.-]/g, '');
+        const stockVal = cleanStock ? (parseFloat(cleanStock) || 0) : 0;
         const hsnVal = colHsn !== -1 ? String(row[colHsn] || '').trim() : '';
         const gstVal = colGst !== -1 ? parseFloat(String(row[colGst]).replace(/[^0-9.-]+/g, '')) || 18 : 18;
 
@@ -484,11 +477,11 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
             <div className="p-4 bg-emerald-950/60 border border-emerald-800/80 rounded-xl text-emerald-300 text-xs space-y-1.5">
               <div className="flex items-center gap-2 font-bold text-sm text-emerald-200">
                 <CheckCircle className="w-4 h-4 text-emerald-400" />
-                <span>Import Succeeded: {result.importedCount} products added to catalog!</span>
+                <span>Import Succeeded: {result.importedCount} products added / updated in catalog!</span>
               </div>
               {result.errorsCount > 0 && (
                 <p className="text-amber-400 text-[11px]">
-                  {result.errorsCount} duplicate SKUs were skipped to protect existing inventory.
+                  {result.errorsCount} rows skipped due to invalid data.
                 </p>
               )}
             </div>
@@ -605,7 +598,6 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
                       <th className="px-3 py-2">Category</th>
                       <th className="px-3 py-2">SKU</th>
                       {isAdmin && <th className="px-3 py-2 text-right">Cost (₹)</th>}
-                      <th className="px-3 py-2 text-right">Selling (₹)</th>
                       <th className="px-3 py-2 text-right">MRP (₹)</th>
                       <th className="px-3 py-2 text-right">Stock</th>
                     </tr>
@@ -630,8 +622,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
                         <td className="px-3 py-1.5 text-stone-400">{r.category || 'General'}</td>
                         <td className="px-3 py-1.5 font-mono text-[11px] text-amber-400">{r.sku || 'Auto-SKU'}</td>
                         {isAdmin && <td className="px-3 py-1.5 text-right font-mono">₹{r.purchasePrice || 0}</td>}
-                        <td className="px-3 py-1.5 text-right font-mono text-amber-400 font-bold">₹{r.sellingPrice || 0}</td>
-                        <td className="px-3 py-1.5 text-right font-mono text-stone-400">₹{r.mrp || r.sellingPrice || 0}</td>
+                        <td className="px-3 py-1.5 text-right font-mono text-amber-400 font-bold">₹{r.mrp || r.sellingPrice || 0}</td>
                         <td className="px-3 py-1.5 text-right font-bold text-emerald-400">{r.currentStock || 0}</td>
                       </tr>
                     ))}

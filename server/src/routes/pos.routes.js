@@ -14,40 +14,49 @@ function sanitizePosProducts(prods, user) {
   });
 }
 
-// GET /api/pos/search - Fast product search by barcode, SKU, or name
+// GET /api/pos/search - Fast product search by barcode, SKU, or name (available in-stock products first)
 router.get('/search', optionalAuth, async (req, res) => {
   try {
-    const { q } = req.query;
+    const { q, categoryId } = req.query;
+    const catFilter = categoryId && categoryId !== 'all' ? { categoryId } : {};
+
     if (!q || !q.trim()) {
-      // Return top 20 active products for quick picking
+      // Return active products with available stock (> 0) showing first
       const quickProducts = await prisma.product.findMany({
-        where: { status: 'ACTIVE' },
-        include: { category: { select: { name: true } } },
-        take: 20,
-        orderBy: { name: 'asc' },
+        where: {
+          status: 'ACTIVE',
+          ...catFilter,
+        },
+        include: { category: { select: { id: true, name: true } } },
+        take: 100,
+        orderBy: [
+          { currentStock: 'desc' },
+          { name: 'asc' },
+        ],
       });
       return res.json(sanitizePosProducts(quickProducts, req.user));
     }
 
     const query = q.trim();
 
-    // 1. Check exact barcode match first (standard scanner behavior)
+    // 1. Check exact barcode match first across entire catalog (barcode scanners work store-wide)
     const exactBarcode = await prisma.product.findFirst({
       where: {
         barcode: query,
         status: 'ACTIVE',
       },
-      include: { category: { select: { name: true } } },
+      include: { category: { select: { id: true, name: true } } },
     });
 
     if (exactBarcode) {
       return res.json(sanitizePosProducts([exactBarcode], req.user));
     }
 
-    // 2. Fuzzy search on title, SKU, or HSN code
+    // 2. Fuzzy search on title, SKU, or HSN code, with in-stock products first
     const matches = await prisma.product.findMany({
       where: {
         status: 'ACTIVE',
+        ...catFilter,
         OR: [
           { sku: { contains: query } },
           { name: { contains: query } },
@@ -55,9 +64,12 @@ router.get('/search', optionalAuth, async (req, res) => {
           { barcode: { contains: query } },
         ],
       },
-      include: { category: { select: { name: true } } },
-      take: 15,
-      orderBy: { name: 'asc' },
+      include: { category: { select: { id: true, name: true } } },
+      take: 80,
+      orderBy: [
+        { currentStock: 'desc' },
+        { name: 'asc' },
+      ],
     });
 
     res.json(sanitizePosProducts(matches, req.user));
@@ -747,7 +759,7 @@ router.post('/returns', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BIL
         });
       }
 
-      const reqQty = parseInt(item.quantity, 10);
+      const reqQty = parseFloat(item.quantity);
       if (isNaN(reqQty) || reqQty <= 0) {
         return res.status(400).json({
           error: `Invalid return quantity (${item.quantity}) for "${invItem.productName}".`,
@@ -865,7 +877,7 @@ router.post('/returns', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BIL
         }, 0);
         const thisReturn = items
           .filter((ri) => ri.productId === invItem.productId)
-          .reduce((s, ri) => s + (parseInt(ri.quantity, 10) || 0), 0);
+          .reduce((s, ri) => s + (parseFloat(ri.quantity) || 0), 0);
         if (prevReturned + thisReturn < invItem.quantity) {
           allFullyReturned = false;
           break;

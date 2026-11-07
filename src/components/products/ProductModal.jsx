@@ -69,7 +69,7 @@ export default function ProductModal({ isOpen, onClose, product, onSaved, catego
         imageUrl: product.imageUrl || '',
         description: product.description || '',
         purchasePrice: product.purchasePrice || 0,
-        sellingPrice: product.sellingPrice || 0,
+        sellingPrice: product.mrp || product.sellingPrice || 0,
         mrp: product.mrp || product.sellingPrice || 0,
         gstRate: product.gstRate !== undefined ? product.gstRate : 18,
         hsnCode: product.hsnCode || '9701',
@@ -89,7 +89,7 @@ export default function ProductModal({ isOpen, onClose, product, onSaved, catego
         description: '',
         purchasePrice: 1000,
         sellingPrice: 1999,
-        mrp: 2499,
+        mrp: 1999,
         gstRate: 18,
         hsnCode: '9701',
         currentStock: 10,
@@ -161,9 +161,10 @@ export default function ProductModal({ isOpen, onClose, product, onSaved, catego
     }
   };
 
-  const margin = formData.sellingPrice - formData.purchasePrice;
+  const productMrp = formData.mrp || formData.sellingPrice || 0;
+  const margin = productMrp - formData.purchasePrice;
   const marginPercent =
-    formData.sellingPrice > 0 ? Math.round((margin / formData.sellingPrice) * 100) : 0;
+    productMrp > 0 ? Math.round((margin / productMrp) * 100) : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
@@ -370,25 +371,18 @@ export default function ProductModal({ isOpen, onClose, product, onSaved, catego
                   />
                 </div>
               )}
-              <div>
-                <label className="block text-[11px] font-semibold text-stone-400 mb-1">Selling Price (₹) *</label>
+              <div className="flex-1">
+                <label className="block text-[11px] font-semibold text-stone-400 mb-1">MRP (₹) *</label>
                 <input
                   type="number"
                   step="0.01"
                   required
-                  value={formData.sellingPrice}
-                  onChange={(e) => setFormData({ ...formData, sellingPrice: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-1.5 bg-stone-900 border border-stone-700 rounded-lg text-stone-100 text-sm font-semibold text-amber-400"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-stone-400 mb-1">MRP Tag (₹)</label>
-                <input
-                  type="number"
-                  step="0.01"
                   value={formData.mrp}
-                  onChange={(e) => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-3 py-1.5 bg-stone-900 border border-stone-700 rounded-lg text-stone-100 text-sm"
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value) || 0;
+                    setFormData({ ...formData, mrp: val, sellingPrice: val });
+                  }}
+                  className="w-full px-3 py-1.5 bg-stone-900 border border-stone-700 rounded-lg text-stone-100 text-sm font-semibold text-amber-400 font-mono"
                 />
               </div>
             </div>
@@ -438,13 +432,18 @@ export default function ProductModal({ isOpen, onClose, product, onSaved, catego
                 className="w-full px-3.5 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-sm"
               >
                 <option value="PCS">PCS (Pieces)</option>
+                <option value="SQFT">SQFT (Square Feet)</option>
+                <option value="SQM">SQM (Square Meters)</option>
+                <option value="MTR">MTR (Meters)</option>
                 <option value="SET">SET (Pair / Set)</option>
                 <option value="BOX">BOX (Pack)</option>
+                <option value="KG">KG (Kilograms)</option>
+                <option value="ROLL">ROLL (Rolls)</option>
               </select>
             </div>
           </div>
 
-          {/* Stock Quantities (only editable on creation; adjustments done via inventory module) */}
+          {/* Stock Quantities (supports decimal quantities e.g. 2635.20) */}
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-stone-300 mb-1">
@@ -452,19 +451,21 @@ export default function ProductModal({ isOpen, onClose, product, onSaved, catego
               </label>
               <input
                 type="number"
+                step="any"
                 disabled={isEdit}
                 value={formData.currentStock}
-                onChange={(e) => setFormData({ ...formData, currentStock: parseInt(e.target.value, 10) || 0 })}
-                className="w-full px-3.5 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-sm disabled:opacity-50"
+                onChange={(e) => setFormData({ ...formData, currentStock: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3.5 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-sm disabled:opacity-50 font-mono"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-stone-300 mb-1">Low Stock Alert Level</label>
               <input
                 type="number"
+                step="any"
                 value={formData.minStock}
-                onChange={(e) => setFormData({ ...formData, minStock: parseInt(e.target.value, 10) || 0 })}
-                className="w-full px-3.5 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-sm"
+                onChange={(e) => setFormData({ ...formData, minStock: parseFloat(e.target.value) || 0 })}
+                className="w-full px-3.5 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-sm font-mono"
               />
             </div>
             <div>

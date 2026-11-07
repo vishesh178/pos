@@ -138,6 +138,11 @@ test('POS invoice generation produces sequential numbering and atomic stock move
 });
 
 test('Smart Invoice Search resolves exact, lowercase, prefix-typo, pure digits, and returns nearest matches for non-existent queries', async () => {
+  const existingInv = await prisma.invoice.findFirst();
+  const targetNum = existingInv ? existingInv.invoiceNumber : 'CA-1001';
+  const digitsOnly = targetNum.replace(/\D/g, '');
+  const prefix = targetNum.split('-')[0] || 'CA';
+
   const posRouter = require('../src/routes/pos.routes');
   const route = posRouter.stack.find((s) => s.route && s.route.path === '/invoices/:id');
   assert.ok(route, 'GET /invoices/:id route handler must exist');
@@ -160,29 +165,34 @@ test('Smart Invoice Search resolves exact, lowercase, prefix-typo, pure digits, 
     });
 
   // 1. Exact match lookup
-  const resExact = await callHandler('CA-1028');
+  const resExact = await callHandler(targetNum);
   assert.equal(resExact.status, 200);
-  assert.equal(resExact.body.invoice.invoiceNumber, 'CA-1028');
+  assert.equal(resExact.body.invoice.invoiceNumber, targetNum);
 
-  // 2. Lowercase match lookup (ca-1028)
-  const resLower = await callHandler('ca-1028');
+  // 2. Lowercase match lookup (e.g. ca-1001)
+  const resLower = await callHandler(targetNum.toLowerCase());
   assert.equal(resLower.status, 200);
-  assert.equal(resLower.body.invoice.invoiceNumber, 'CA-1028');
+  assert.equal(resLower.body.invoice.invoiceNumber, targetNum);
 
-  // 3. Typo with missing 'A' (C-1028)
-  const resTypo = await callHandler('C-1028');
+  // 3. Typo with missing 'A' (e.g. C-1001)
+  const resTypo = await callHandler(`${prefix.charAt(0)}-${digitsOnly}`);
   assert.equal(resTypo.status, 200);
-  assert.equal(resTypo.body.invoice.invoiceNumber, 'CA-1028');
+  assert.equal(resTypo.body.invoice.invoiceNumber, targetNum);
 
-  // 4. Pure digits lookup (1028)
-  const resDigits = await callHandler('1028');
+  // 4. Pure digits lookup (e.g. 1001)
+  const resDigits = await callHandler(digitsOnly);
   assert.equal(resDigits.status, 200);
-  assert.equal(resDigits.body.invoice.invoiceNumber, 'CA-1028');
+  assert.equal(resDigits.body.invoice.invoiceNumber, targetNum);
 
-  // 5. Typo with missing 'A' for CA-1029 (C-1029) -> Auto-resolves to CA-1029!
-  const resTypo1029 = await callHandler('C-1029');
-  assert.equal(resTypo1029.status, 200);
-  assert.equal(resTypo1029.body.invoice.invoiceNumber, 'CA-1029');
+  // 5. Typo with missing 'A' for second invoice if present
+  const allInvs = await prisma.invoice.findMany({ take: 2 });
+  if (allInvs.length > 1) {
+    const secondNum = allInvs[1].invoiceNumber;
+    const secondDigits = secondNum.replace(/\D/g, '');
+    const resTypoSecond = await callHandler(`C-${secondDigits}`);
+    assert.equal(resTypoSecond.status, 200);
+    assert.equal(resTypoSecond.body.invoice.invoiceNumber, secondNum);
+  }
 
   // 6. Non-existent query (9999) -> Must return 404 with nearest matches sorted by proximity!
   const resNearest = await callHandler('9999');

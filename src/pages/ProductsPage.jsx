@@ -435,13 +435,8 @@ export default function ProductsPage() {
                 <div className="p-2.5 rounded-xl bg-stone-950 border border-stone-800/80 flex items-center justify-between">
                   <div>
                     <span className="text-base font-bold font-mono text-amber-400">
-                      ₹{p.sellingPrice.toFixed(2)}
+                      ₹{(p.mrp || p.sellingPrice).toFixed(2)}
                     </span>
-                    {p.mrp > p.sellingPrice && (
-                      <span className="text-[11px] font-mono text-stone-500 line-through ml-1.5">
-                        ₹{p.mrp.toFixed(2)}
-                      </span>
-                    )}
                     {isAdmin && p.purchasePrice !== null && p.purchasePrice !== undefined && (
                       <p className="text-[10px] text-stone-500 font-mono mt-0.5">
                         Cost: ₹{p.purchasePrice.toFixed(2)}
@@ -459,7 +454,7 @@ export default function ProductsPage() {
                           : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
                       }`}
                     >
-                      {p.currentStock} {p.unit}
+                      {Number(p.currentStock.toFixed(2))} {p.unit}
                     </span>
                     <p className="text-[9px] text-stone-500 mt-0.5">GST: {p.gstRate}%</p>
                   </div>
@@ -534,8 +529,7 @@ export default function ProductsPage() {
                 <th className="px-5 py-3.5">Product Title & Category</th>
                 <th className="px-4 py-3.5">SKU & Barcode</th>
                 {isAdmin && <th className="px-4 py-3.5 text-right">Purchase Cost</th>}
-                <th className="px-4 py-3.5 text-right">Selling Price</th>
-                <th className="px-4 py-3.5 text-right">MRP</th>
+                <th className="px-4 py-3.5 text-right">MRP (₹)</th>
                 <th className="px-4 py-3.5 text-center">GST %</th>
                 <th className="px-4 py-3.5 text-center">Stock</th>
                 <th className="px-4 py-3.5 text-center">Status</th>
@@ -545,13 +539,13 @@ export default function ProductsPage() {
             <tbody className="divide-y divide-stone-800/80 text-stone-300">
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 10 : 9} className="text-center py-12 text-stone-400 font-serif">
+                  <td colSpan={isAdmin ? 9 : 8} className="text-center py-12 text-stone-400 font-serif">
                     Loading showroom products...
                   </td>
                 </tr>
               ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 10 : 9} className="text-center py-12 text-stone-400">
+                  <td colSpan={isAdmin ? 9 : 8} className="text-center py-12 text-stone-400">
                     No décor products found matching your filters.
                   </td>
                 </tr>
@@ -631,10 +625,7 @@ export default function ProductsPage() {
                         </td>
                       )}
                       <td className="px-4 py-3.5 text-right font-mono font-bold text-amber-400 text-sm">
-                        ₹{p.sellingPrice.toFixed(2)}
-                      </td>
-                      <td className="px-4 py-3.5 text-right font-mono text-stone-400 line-through text-[11px]">
-                        ₹{p.mrp ? p.mrp.toFixed(2) : p.sellingPrice.toFixed(2)}
+                        ₹{(p.mrp || p.sellingPrice).toFixed(2)}
                       </td>
                       <td className="px-4 py-3.5 text-center font-mono">
                         <span className="px-2 py-0.5 rounded bg-stone-800 text-stone-300 text-[10px] font-semibold">
@@ -651,7 +642,7 @@ export default function ProductsPage() {
                               : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
                           }`}
                         >
-                          {p.currentStock} {p.unit}
+                          {Number(p.currentStock.toFixed(2))} {p.unit}
                         </span>
                       </td>
                       <td className="px-4 py-3.5 text-center">

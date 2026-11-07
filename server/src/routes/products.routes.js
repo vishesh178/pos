@@ -29,6 +29,7 @@ function filterProductForUser(product, user) {
 router.get('/categories', async (req, res) => {
   try {
     const categories = await prisma.category.findMany({
+      where: { products: { some: {} } },
       include: {
         _count: { select: { products: true } },
       },
@@ -220,9 +221,10 @@ router.get('/', optionalAuth, async (req, res) => {
 router.get('/wholesale-catalog', async (req, res) => {
   try {
     const { categoryId, minStock = 1 } = req.query;
+    const minStockParsed = (minStock !== undefined && minStock !== '') ? parseFloat(minStock) : 0.0001;
     const where = {
       status: 'ACTIVE',
-      currentStock: { gte: parseInt(minStock, 10) || 1 },
+      currentStock: { gte: isNaN(minStockParsed) ? 0.0001 : minStockParsed },
     };
 
     if (categoryId && categoryId !== 'all') {
@@ -275,8 +277,8 @@ router.get('/wholesale-catalog', async (req, res) => {
           brand: p.brand || 'Curated Art',
           description: p.description,
           imageUrl: p.imageUrl,
-          wholesalePrice: p.sellingPrice,
-          mrp: p.mrp,
+          wholesalePrice: p.mrp || p.sellingPrice,
+          mrp: p.mrp || p.sellingPrice,
           retailMarginPercent: marginPercent,
           gstRate: p.gstRate,
           hsnCode: p.hsnCode,
@@ -357,7 +359,7 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTORY'
       return res.status(400).json({ error: `Barcode '${barcode}' is already in use.` });
     }
 
-    const stockQty = currentStock ? parseInt(currentStock, 10) : 0;
+    const stockQty = currentStock !== undefined && currentStock !== '' ? parseFloat(currentStock) : 0.0;
     const isAdmin = req.user && req.user.role === 'ADMIN';
     const cost = (isAdmin && purchasePrice) ? parseFloat(purchasePrice) : 0.0;
     const price = sellingPrice ? parseFloat(sellingPrice) : 0.0;
@@ -382,7 +384,7 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTORY'
           gstRate: gst,
           hsnCode: hsnCode ? hsnCode.trim() : '9701',
           currentStock: stockQty,
-          minStock: minStock ? parseInt(minStock, 10) : 5,
+          minStock: minStock !== undefined && minStock !== '' ? parseFloat(minStock) : 5.0,
           unit: unit ? unit.trim().toUpperCase() : 'PCS',
           supplierId: supplierId || null,
           status: status || 'ACTIVE',
@@ -479,7 +481,8 @@ router.put('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTOR
           mrp: mrp !== undefined ? parseFloat(mrp) : undefined,
           gstRate: gstRate !== undefined ? parseFloat(gstRate) : undefined,
           hsnCode: hsnCode !== undefined ? hsnCode.trim() : undefined,
-          minStock: minStock !== undefined ? parseInt(minStock, 10) : undefined,
+          currentStock: (req.body.currentStock !== undefined && req.body.currentStock !== '') ? parseFloat(req.body.currentStock) : undefined,
+          minStock: (minStock !== undefined && minStock !== '') ? parseFloat(minStock) : undefined,
           unit: unit !== undefined ? unit.trim().toUpperCase() : undefined,
           supplierId: supplierId !== undefined ? supplierId : undefined,
           status: status !== undefined ? status : undefined,
@@ -563,20 +566,6 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
           barcode = generateEan13Barcode(barcodeSeq);
         }
 
-        // Check SKU duplicate
-        const dupSku = await prisma.product.findUnique({ where: { sku } });
-        if (dupSku) {
-          errors.push({ row: i + 1, sku, error: 'SKU already exists.' });
-          continue;
-        }
-
-        // Check Barcode duplicate
-        const dupBarcode = await prisma.product.findUnique({ where: { barcode } });
-        if (dupBarcode) {
-          barcodeSeq = (barcodeSeq + 1000) % 89999 + 1;
-          barcode = generateEan13Barcode(barcodeSeq);
-        }
-
         // Category resolution
         let categoryId = null;
         const catName = row.category ? row.category.trim() : 'General';
@@ -610,10 +599,43 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
           }
         }
 
-        const currentStock = row.currentStock ? parseInt(row.currentStock, 10) : 0;
+        const currentStock = (row.currentStock !== undefined && row.currentStock !== '') ? parseFloat(String(row.currentStock).replace(/,/g, '')) : 0.0;
         const isAdmin = req.user && req.user.role === 'ADMIN';
         const purchasePrice = (isAdmin && row.purchasePrice) ? parseFloat(row.purchasePrice) : 0.0;
         const sellingPrice = row.sellingPrice ? parseFloat(row.sellingPrice) : 0.0;
+
+        // If product already exists with this SKU, update it with the new Excel data (stock, prices, unit, image)
+        const dupSku = await prisma.product.findUnique({ where: { sku } });
+        if (dupSku) {
+          const updateData = {
+            name: row.name.trim(),
+            currentStock,
+            unit: row.unit ? row.unit.trim().toUpperCase() : dupSku.unit,
+          };
+          const effectivePrice = row.mrp !== undefined ? parseFloat(row.mrp) : sellingPrice;
+          updateData.mrp = effectivePrice;
+          updateData.sellingPrice = effectivePrice;
+          if (isAdmin && purchasePrice > 0) updateData.purchasePrice = purchasePrice;
+          if (imageUrl) updateData.imageUrl = imageUrl;
+          if (row.gstRate !== undefined) updateData.gstRate = parseFloat(row.gstRate);
+          if (row.hsnCode) updateData.hsnCode = String(row.hsnCode).trim();
+          if (categoryId) updateData.categoryId = categoryId;
+
+          const updatedProd = await prisma.product.update({
+            where: { id: dupSku.id },
+            data: updateData,
+          });
+
+          imported.push(updatedProd);
+          continue;
+        }
+
+        // Check Barcode duplicate
+        const dupBarcode = await prisma.product.findUnique({ where: { barcode } });
+        if (dupBarcode) {
+          barcodeSeq = (barcodeSeq + 1000) % 89999 + 1;
+          barcode = generateEan13Barcode(barcodeSeq);
+        }
 
         const prod = await prisma.product.create({
           data: {
@@ -630,7 +652,7 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
             gstRate: row.gstRate !== undefined ? parseFloat(row.gstRate) : 18.0,
             hsnCode: row.hsnCode ? String(row.hsnCode).trim() : '9701',
             currentStock,
-            minStock: row.minStock ? parseInt(row.minStock, 10) : 5,
+            minStock: (row.minStock !== undefined && row.minStock !== '') ? parseFloat(String(row.minStock).replace(/,/g, '')) : 5.0,
             unit: row.unit ? row.unit.trim().toUpperCase() : 'PCS',
             status: 'ACTIVE',
           },

@@ -447,6 +447,220 @@ router.delete('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER']), asyn
   }
 });
 
+// GET /api/estimates/:id/export/excel - Export single estimate as Excel spreadsheet
+router.get('/:id/export/excel', authenticateToken, async (req, res) => {
+  try {
+    const estimate = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+        customer: true,
+      },
+    });
+
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    const business = (await prisma.businessProfile.findFirst()) || {
+      businessName: 'Curated Art',
+      phone: '+91 98765 43210',
+      gstin: '24AAAAA0000A1Z5',
+      address: 'Showroom #104, Design District, SG Highway, Ahmedabad, Gujarat - 380054',
+    };
+
+    const XLSX = require('xlsx');
+
+    const wsData = [
+      [business.businessName.toUpperCase(), '', '', '', '', '', '', ''],
+      [`Tel: ${business.phone || ''} | GSTIN: ${business.gstin || ''}`, '', '', '', '', '', '', ''],
+      [`Address: ${business.address || ''}`, '', '', '', '', '', '', ''],
+      [],
+      ['ESTIMATE / QUOTATION', '', '', '', `Doc #: ${estimate.estimateNumber}`, '', `Date: ${new Date(estimate.createdAt).toLocaleDateString('en-IN')}`, ''],
+      [`Customer: ${estimate.customerName}`, '', '', '', `Valid For: ${estimate.validityDays || 15} Days`, '', `Status: ${estimate.status}`, ''],
+      [`Phone: ${estimate.customerMobile || 'N/A'}`, '', `GSTIN: ${estimate.customerGstin || 'N/A'}`, '', `Place of Supply: ${estimate.placeOfSupply || '24-Gujarat'}`, '', '', ''],
+      [],
+      ['#', 'Item Description', 'Item Code / SKU', 'Product Photo', 'Qty', 'Rate (MRP) (₹)', 'Discount (₹)', 'Total (₹)'],
+    ];
+
+    (estimate.items || []).forEach((it, idx) => {
+      const photoInfo = it.product?.imageUrl || it.imageUrl || '-';
+      wsData.push([
+        idx + 1,
+        it.productName,
+        it.sku || it.product?.sku || 'CUSTOM',
+        photoInfo,
+        it.quantity,
+        it.mrp || it.unitPrice,
+        it.discountAmount || 0,
+        it.totalAmount,
+      ]);
+    });
+
+    wsData.push([]);
+    wsData.push(['', '', '', '', '', '', 'BILLING AMOUNT (SUBTOTAL):', estimate.subtotal]);
+    if (estimate.discountTotal > 0) {
+      wsData.push(['', '', '', '', '', '', 'TOTAL DISCOUNT:', -estimate.discountTotal]);
+    }
+    if (estimate.cgstTotal > 0) {
+      wsData.push(['', '', '', '', '', '', 'CGST:', estimate.cgstTotal]);
+      wsData.push(['', '', '', '', '', '', 'SGST:', estimate.sgstTotal]);
+    }
+    if (estimate.igstTotal > 0) {
+      wsData.push(['', '', '', '', '', '', 'IGST (Inter-State):', estimate.igstTotal]);
+    }
+    if (estimate.roundOff !== 0) {
+      wsData.push(['', '', '', '', '', '', 'Round Off:', estimate.roundOff]);
+    }
+    wsData.push(['', '', '', '', '', '', 'FINAL PAYABLE AMOUNT (GRAND TOTAL):', estimate.grandTotal]);
+    wsData.push([]);
+    wsData.push(['Notes & Terms:']);
+    wsData.push([`1. This estimate is valid for ${estimate.validityDays || 15} days from the date of issue.`]);
+    wsData.push(['2. Subject to product availability at the time of final confirmation.']);
+    wsData.push(['3. Fragile luxury décor is quality-checked prior to dispatch.']);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    ws['!cols'] = [
+      { wch: 6 },
+      { wch: 32 },
+      { wch: 20 },
+      { wch: 25 },
+      { wch: 8 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 16 },
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Estimate');
+
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="Estimate_${estimate.estimateNumber}.xlsx"`);
+    res.send(buffer);
+  } catch (err) {
+    console.error('Estimate Excel export error:', err);
+    res.status(500).json({ error: 'Failed to export estimate to Excel: ' + err.message });
+  }
+});
+
+// PATCH /api/estimates/:id/discount - Update overall or item discounts on an estimate
+router.patch('/:id/discount', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
+  try {
+    const { invoiceDiscount, itemDiscounts } = req.body;
+
+    const existing = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    if (existing.status === 'CONVERTED') {
+      return res.status(400).json({ error: 'Cannot modify discount on an already converted estimate.' });
+    }
+
+    const business = await prisma.businessProfile.findFirst();
+    const businessStateCode = business ? business.stateCode : '24';
+    const cStateCode = existing.placeOfSupply?.includes('-') ? existing.placeOfSupply.split('-')[0] : businessStateCode;
+
+    // Prepare items with new discounts
+    const itemDiscountMap = {};
+    if (Array.isArray(itemDiscounts)) {
+      for (const idc of itemDiscounts) {
+        if (idc.itemId) itemDiscountMap[idc.itemId] = Math.max(0, parseFloat(idc.discountAmount) || 0);
+      }
+    }
+
+    const updatedRawItems = existing.items.map((it) => {
+      const newDiscount = itemDiscountMap[it.id] !== undefined ? itemDiscountMap[it.id] : it.discountAmount;
+      return {
+        id: it.id,
+        productId: it.productId,
+        productName: it.productName,
+        sku: it.sku,
+        hsnCode: it.hsnCode,
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        mrp: it.mrp,
+        discountAmount: newDiscount,
+        gstRate: it.taxRate,
+        isTaxInclusive: false,
+      };
+    });
+
+    const finalInvoiceDiscount = invoiceDiscount !== undefined
+      ? Math.max(0, parseFloat(invoiceDiscount) || 0)
+      : 0;
+
+    const calc = calculateInvoiceTotals(updatedRawItems, {
+      businessStateCode,
+      customerStateCode: cStateCode,
+      invoiceDiscount: finalInvoiceDiscount,
+    });
+
+    // Update in database transaction
+    const updated = await prisma.$transaction(async (tx) => {
+      for (const calcItem of calc.items) {
+        const matchingRaw = updatedRawItems.find((r) => r.sku === calcItem.sku && r.productName === calcItem.productName);
+        if (matchingRaw?.id) {
+          await tx.estimateItem.update({
+            where: { id: matchingRaw.id },
+            data: {
+              discountAmount: calcItem.discountAmount,
+              taxableAmount: calcItem.taxableAmount,
+              cgstAmount: calcItem.cgstAmount,
+              sgstAmount: calcItem.sgstAmount,
+              igstAmount: calcItem.igstAmount,
+              totalAmount: calcItem.totalAmount,
+            },
+          });
+        }
+      }
+
+      return tx.estimate.update({
+        where: { id: existing.id },
+        data: {
+          subtotal: calc.subtotal,
+          discountTotal: calc.discountTotal,
+          taxTotal: calc.taxTotal,
+          cgstTotal: calc.cgstTotal,
+          sgstTotal: calc.sgstTotal,
+          igstTotal: calc.igstTotal,
+          roundOff: calc.roundOff,
+          grandTotal: calc.grandTotal,
+        },
+        include: {
+          items: {
+            include: {
+              product: true,
+            },
+          },
+          customer: true,
+        },
+      });
+    });
+
+    res.json({ message: 'Estimate discount updated successfully', estimate: updated });
+  } catch (err) {
+    console.error('Update estimate discount error:', err);
+    res.status(500).json({ error: 'Failed to update discount: ' + err.message });
+  }
+});
+
 // POST /api/estimates/:id/sync - Standalone mode (sync not required)
 router.post('/:id/sync', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
   res.json({ message: 'Estimate sync is not required in standalone mode.' });

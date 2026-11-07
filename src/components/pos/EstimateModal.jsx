@@ -1,17 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Printer,
   FileText,
+  FileDown,
+  FileSpreadsheet,
   Share2,
   Copy,
   Check,
-  CheckCircle2,
+  Tag,
   ArrowRight,
-  ExternalLink,
-  Clock,
-  Sparkles,
+  Package,
+  Edit3,
+  Save,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { downloadExportFile } from '../../utils/exportDownloader';
 
 export default function EstimateModal({
   isOpen,
@@ -20,11 +24,94 @@ export default function EstimateModal({
   businessProfile,
   onConvertToBill,
 }) {
+  const { token } = useAuth();
+  const [currentEstimate, setCurrentEstimate] = useState(estimate);
   const [layout, setLayout] = useState('a4'); // 'a4' or 'thermal'
   const [copied, setCopied] = useState(false);
   const [converting, setConverting] = useState(false);
+  const [downloadingExcel, setDownloadingExcel] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
-  if (!isOpen || !estimate) return null;
+  // Discount editor state
+  const [isEditingDiscount, setIsEditingDiscount] = useState(false);
+  const [modalBillDiscMode, setModalBillDiscMode] = useState('rupee'); // 'rupee' or 'percent'
+  const [billDiscountInput, setBillDiscountInput] = useState(0);
+  const [billDiscPercentInput, setBillDiscPercentInput] = useState('');
+  const [modalItemDiscModes, setModalItemDiscModes] = useState({});
+  const [itemDiscountsInput, setItemDiscountsInput] = useState({});
+  const [itemDiscPercentInputs, setItemDiscPercentInputs] = useState({});
+  const [discountSaving, setDiscountSaving] = useState(false);
+  const [discountError, setDiscountError] = useState('');
+
+  useEffect(() => {
+    setCurrentEstimate(estimate);
+    if (estimate) {
+      setBillDiscountInput(estimate.discountTotal || 0);
+      const map = {};
+      (estimate.items || []).forEach((it) => {
+        map[it.id] = it.discountAmount || 0;
+      });
+      setItemDiscountsInput(map);
+    }
+  }, [estimate]);
+
+  const handleModalBillDiscModeChange = (mode) => {
+    if (mode === modalBillDiscMode) return;
+    setModalBillDiscMode(mode);
+    if (mode === 'percent') {
+      const pct =
+        currentEstimate.subtotal > 0 && billDiscountInput > 0
+          ? Math.round(((billDiscountInput / currentEstimate.subtotal) * 100) * 100) / 100
+          : '';
+      setBillDiscPercentInput(pct !== '' ? pct.toString() : '');
+    } else {
+      setBillDiscPercentInput('');
+    }
+  };
+
+  const handleModalBillDiscChange = (val) => {
+    if (modalBillDiscMode === 'percent') {
+      setBillDiscPercentInput(val);
+      const pct = parseFloat(val) || 0;
+      const calculated = Math.round(((currentEstimate.subtotal * pct) / 100) * 100) / 100;
+      setBillDiscountInput(calculated);
+    } else {
+      setBillDiscountInput(parseFloat(val) || 0);
+    }
+  };
+
+  const handleModalItemDiscModeToggle = (it) => {
+    const currentMode = modalItemDiscModes[it.id] || 'rupee';
+    const nextMode = currentMode === 'rupee' ? 'percent' : 'rupee';
+    setModalItemDiscModes((prev) => ({ ...prev, [it.id]: nextMode }));
+
+    const itemTotal = it.unitPrice * it.quantity;
+    if (nextMode === 'percent') {
+      const currentDisc = itemDiscountsInput[it.id] || 0;
+      const pct =
+        itemTotal > 0 && currentDisc > 0
+          ? Math.round(((currentDisc / itemTotal) * 100) * 100) / 100
+          : '';
+      setItemDiscPercentInputs((prev) => ({ ...prev, [it.id]: pct ? pct.toString() : '' }));
+    } else {
+      setItemDiscPercentInputs((prev) => ({ ...prev, [it.id]: '' }));
+    }
+  };
+
+  const handleModalItemDiscChange = (it, val) => {
+    const mode = modalItemDiscModes[it.id] || 'rupee';
+    if (mode === 'percent') {
+      setItemDiscPercentInputs((prev) => ({ ...prev, [it.id]: val }));
+      const pct = parseFloat(val) || 0;
+      const itemTotal = it.unitPrice * it.quantity;
+      const calculated = Math.round(((itemTotal * pct) / 100) * 100) / 100;
+      setItemDiscountsInput((prev) => ({ ...prev, [it.id]: calculated }));
+    } else {
+      setItemDiscountsInput((prev) => ({ ...prev, [it.id]: parseFloat(val) || 0 }));
+    }
+  };
+
+  if (!isOpen || !currentEstimate) return null;
 
   const business = businessProfile || {
     businessName: 'Curated Art',
@@ -39,15 +126,84 @@ export default function EstimateModal({
     window.print();
   };
 
-  const estimateDate = new Date(estimate.createdAt || Date.now());
-  const dateFormatted = estimateDate.toLocaleDateString('en-IN', {
+  const handleDownloadPDF = async () => {
+    setDownloadingPdf(true);
+    try {
+      if (window.electronAPI?.savePDF) {
+        const filename = `Estimate_${currentEstimate.estimateNumber || 'QUOTATION'}.pdf`;
+        const res = await window.electronAPI.savePDF({ filename });
+        if (res?.success) {
+          alert(`Estimate PDF saved successfully to:\n${res.filePath}`);
+        } else if (!res?.canceled) {
+          alert('Could not save PDF: ' + (res?.error || 'Unknown error'));
+        }
+      } else {
+        // In browser, window.print triggers the native print/Save as PDF dialog
+        window.print();
+      }
+    } catch (err) {
+      console.error('PDF Download Error:', err);
+      alert('Failed to download PDF: ' + err.message);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    setDownloadingExcel(true);
+    try {
+      const url = `/api/estimates/${currentEstimate.id}/export/excel`;
+      const fallbackFilename = `Estimate_${currentEstimate.estimateNumber || 'QUOTATION'}.xlsx`;
+      await downloadExportFile(url, fallbackFilename, token);
+    } finally {
+      setDownloadingExcel(false);
+    }
+  };
+
+  const handleSaveDiscounts = async () => {
+    setDiscountSaving(true);
+    setDiscountError('');
+    try {
+      const payload = {
+        invoiceDiscount: parseFloat(billDiscountInput) || 0,
+        itemDiscounts: Object.entries(itemDiscountsInput).map(([itemId, discountAmount]) => ({
+          itemId,
+          discountAmount: parseFloat(discountAmount) || 0,
+        })),
+      };
+
+      const res = await fetch(`/api/estimates/${currentEstimate.id}/discount`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update discount');
+
+      setCurrentEstimate(data.estimate);
+      setIsEditingDiscount(false);
+    } catch (err) {
+      setDiscountError(err.message);
+    } finally {
+      setDiscountSaving(false);
+    }
+  };
+
+  const estimateDate = new Date(currentEstimate.createdAt || Date.now());
+  const dateFormatted = estimateDate.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   });
 
-  const validUntilDate = new Date(estimateDate.getTime() + (estimate.validityDays || 15) * 86400000);
-  const validUntilFormatted = validUntilDate.toLocaleDateString('en-IN', {
+  const validUntilDate = new Date(
+    estimateDate.getTime() + (currentEstimate.validityDays || 15) * 86400000
+  );
+  const validUntilFormatted = validUntilDate.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -55,25 +211,30 @@ export default function EstimateModal({
 
   // Generate WhatsApp message text
   const generateWhatsAppText = () => {
-    const lines = (estimate.items || []).map((it, idx) => {
-      return `${idx + 1}. *${it.productName}* (${it.sku})\n   ${it.quantity} pc(s) @ ₹${it.unitPrice.toLocaleString('en-IN')} = ₹${it.totalAmount.toLocaleString('en-IN')}`;
-    }).join('\n\n');
+    const lines = (currentEstimate.items || [])
+      .map((it, idx) => {
+        const discText = it.discountAmount > 0 ? ` (Disc: -₹${it.discountAmount})` : '';
+        return `${idx + 1}. *${it.productName}* (${it.sku})\n   ${it.quantity} pc(s) @ ₹${(it.mrp || it.unitPrice).toLocaleString('en-IN')}${discText} = ₹${it.totalAmount.toLocaleString('en-IN')}`;
+      })
+      .join('\n\n');
 
     return (
-      `🏛️ *CURATED ART — Luxury Home Décor*\n` +
-      `*Quotation / Estimate:* #${estimate.estimateNumber}\n` +
-      `*Date:* ${dateFormatted} (Valid for ${estimate.validityDays || 15} days)\n` +
-      `*Client:* ${estimate.customerName}\n\n` +
+      `🏛️ *${business.businessName.toUpperCase()} — Luxury Decor*\n` +
+      `*Quotation / Estimate:* #${currentEstimate.estimateNumber}\n` +
+      `*Date:* ${dateFormatted} (Valid for ${currentEstimate.validityDays || 15} days)\n` +
+      `*Customer:* ${currentEstimate.customerName}\n\n` +
       `📋 *Quoted Pieces:*\n${lines}\n\n` +
       `───────────────\n` +
-      `*Subtotal:* ₹${estimate.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-      (estimate.discountTotal > 0 ? `*Discount:* -₹${estimate.discountTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` : '') +
-      `*GST:* ₹${estimate.taxTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
-      `*Grand Total: ₹${estimate.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}*\n` +
+      `*Subtotal:* ₹${currentEstimate.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+      (currentEstimate.discountTotal > 0
+        ? `*Total Discount:* -₹${currentEstimate.discountTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n`
+        : '') +
+      `*GST:* ₹${currentEstimate.taxTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+      `*Grand Total: ₹${currentEstimate.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}*\n` +
       `───────────────\n\n` +
       `📍 *Showroom:* ${business.address}\n` +
       `📞 *Phone:* ${business.phone}\n\n` +
-      `💬 *Reply to this message to confirm your order or request custom adjustments!*`
+      `💬 *Reply to this message to confirm your order!*`
     );
   };
 
@@ -86,7 +247,7 @@ export default function EstimateModal({
 
   const handleOpenWhatsApp = () => {
     const text = generateWhatsAppText();
-    const cleanPhone = (estimate.customerMobile || '').replace(/\D/g, '');
+    const cleanPhone = (currentEstimate.customerMobile || '').replace(/\D/g, '');
     let url = `https://wa.me/?text=${encodeURIComponent(text)}`;
     if (cleanPhone.length >= 10) {
       const finalPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
@@ -99,7 +260,7 @@ export default function EstimateModal({
     if (!onConvertToBill) return;
     setConverting(true);
     try {
-      await onConvertToBill(estimate);
+      await onConvertToBill(currentEstimate);
     } finally {
       setConverting(false);
     }
@@ -107,6 +268,36 @@ export default function EstimateModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto">
+      {/* Print Stylesheet for exact isolation and A4 scaling */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-estimate, #printable-estimate * {
+            visibility: visible !important;
+          }
+          #printable-estimate {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 16px !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
+            border: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+        }
+      `}</style>
+
       <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden my-6">
         {/* Top Header & Actions Bar */}
         <div className="px-6 py-3.5 border-b border-stone-800 flex items-center justify-between bg-stone-900/90 print:hidden">
@@ -117,18 +308,18 @@ export default function EstimateModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-serif font-bold text-sm text-stone-100">
-                  Estimate / Quotation {estimate.estimateNumber}
+                  Estimate / Quotation {currentEstimate.estimateNumber}
                 </h3>
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                    estimate.status === 'CONVERTED'
+                    currentEstimate.status === 'CONVERTED'
                       ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                      : estimate.status === 'CANCELLED'
+                      : currentEstimate.status === 'CANCELLED'
                       ? 'bg-rose-950 text-rose-400 border border-rose-800'
                       : 'bg-amber-950 text-amber-400 border border-amber-800'
                   }`}
                 >
-                  {estimate.status || 'PENDING'}
+                  {currentEstimate.status || 'PENDING'}
                 </span>
               </div>
               <p className="text-[11px] text-stone-400 font-medium">
@@ -141,7 +332,7 @@ export default function EstimateModal({
             <div className="bg-stone-950 p-1 rounded-xl border border-stone-800 flex items-center text-xs">
               <button
                 onClick={() => setLayout('a4')}
-                className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
+                className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
                   layout === 'a4'
                     ? 'bg-amber-500 text-stone-950'
                     : 'text-stone-400 hover:text-stone-200'
@@ -151,7 +342,7 @@ export default function EstimateModal({
               </button>
               <button
                 onClick={() => setLayout('thermal')}
-                className={`px-3 py-1 rounded-lg font-semibold transition-colors ${
+                className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
                   layout === 'thermal'
                     ? 'bg-amber-500 text-stone-950'
                     : 'text-stone-400 hover:text-stone-200'
@@ -169,6 +360,150 @@ export default function EstimateModal({
             </button>
           </div>
         </div>
+
+        {/* Discount Editor Panel (if toggled) */}
+        {isEditingDiscount && (
+          <div className="p-4 bg-stone-950 border-b border-stone-800 print:hidden space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs">
+                <Tag className="w-4 h-4" />
+                <span>Add / Adjust Discounts for {currentEstimate.estimateNumber}</span>
+              </div>
+              <button
+                onClick={() => setIsEditingDiscount(false)}
+                className="text-stone-400 hover:text-stone-200 text-xs cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+
+            {discountError && (
+              <p className="text-xs text-rose-400 bg-rose-950/40 p-2 rounded-lg border border-rose-800">
+                {discountError}
+              </p>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Overall Bill Discount */}
+              <div className="bg-stone-900 p-3 rounded-xl border border-stone-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-medium text-stone-300 flex items-center gap-1.5">
+                    <span>Overall Discount</span>
+                    <div className="inline-flex bg-stone-950 border border-stone-700 rounded-md p-0.5 text-[10px]">
+                      <button
+                        type="button"
+                        onClick={() => handleModalBillDiscModeChange('rupee')}
+                        className={`px-1.5 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                          modalBillDiscMode === 'rupee'
+                            ? 'bg-amber-500 text-stone-950 shadow-sm'
+                            : 'text-stone-400 hover:text-stone-200'
+                        }`}
+                        title="Flat Rupee discount"
+                      >
+                        ₹
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleModalBillDiscModeChange('percent')}
+                        className={`px-1.5 py-0.5 rounded font-bold transition-colors cursor-pointer ${
+                          modalBillDiscMode === 'percent'
+                            ? 'bg-amber-500 text-stone-950 shadow-sm'
+                            : 'text-stone-400 hover:text-stone-200'
+                        }`}
+                        title="Percentage discount"
+                      >
+                        %
+                      </button>
+                    </div>
+                  </label>
+                  {modalBillDiscMode === 'percent' && billDiscountInput > 0 && (
+                    <span className="text-[10px] text-stone-400 font-mono">
+                      (-₹{Number(billDiscountInput).toFixed(2)})
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max={modalBillDiscMode === 'percent' ? 100 : undefined}
+                  step="any"
+                  value={modalBillDiscMode === 'percent' ? billDiscPercentInput : (billDiscountInput || '')}
+                  onChange={(e) => handleModalBillDiscChange(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full bg-stone-950 border border-stone-700 rounded-lg px-3 py-1.5 text-xs text-amber-400 font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              {/* Item Specific Discounts */}
+              <div className="bg-stone-900 p-3 rounded-xl border border-stone-800 space-y-2 max-h-48 overflow-y-auto">
+                <p className="text-[11px] font-medium text-stone-300">Line-Item Discounts</p>
+                <div className="space-y-2">
+                  {(currentEstimate.items || []).map((it) => {
+                    const itemMode = modalItemDiscModes[it.id] || 'rupee';
+                    const itemVal =
+                      itemMode === 'percent'
+                        ? (itemDiscPercentInputs[it.id] ?? '')
+                        : (itemDiscountsInput[it.id] ?? '');
+                    return (
+                      <div key={it.id} className="flex items-center justify-between gap-2 text-xs">
+                        <div className="truncate flex-1 min-w-0">
+                          <p className="truncate text-stone-300 font-serif text-[11px] leading-tight">
+                            {it.productName}
+                          </p>
+                          <p className="text-[10px] text-stone-500 font-mono">
+                            {it.quantity} × ₹{it.unitPrice.toFixed(2)}
+                            {itemMode === 'percent' && (itemDiscountsInput[it.id] > 0) && (
+                              <span className="text-amber-400 ml-1">
+                                (-₹{Number(itemDiscountsInput[it.id]).toFixed(2)})
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleModalItemDiscModeToggle(it)}
+                            className="px-1.5 py-0.5 rounded bg-stone-950 border border-stone-700 hover:border-amber-500 text-amber-400 text-[10px] font-bold font-mono transition-colors cursor-pointer"
+                            title="Click to toggle ₹ flat and % percentage"
+                          >
+                            {itemMode === 'percent' ? '%' : '₹'}
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            max={itemMode === 'percent' ? 100 : undefined}
+                            step="any"
+                            value={itemVal}
+                            onChange={(e) => handleModalItemDiscChange(it, e.target.value)}
+                            placeholder="0"
+                            className="w-16 bg-stone-950 border border-stone-700 rounded px-2 py-0.5 text-right font-mono text-xs text-amber-400 focus:outline-none focus:border-amber-500"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button
+                onClick={() => setIsEditingDiscount(false)}
+                className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold cursor-pointer"
+              >
+                Discard
+              </button>
+              <button
+                onClick={handleSaveDiscounts}
+                disabled={discountSaving}
+                className="px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{discountSaving ? 'Saving...' : 'Apply & Recalculate'}</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Printable View Container */}
         <div className="p-6 bg-stone-950 max-h-[65vh] overflow-y-auto flex justify-center">
@@ -191,8 +526,8 @@ export default function EstimateModal({
 
               <div className="py-2 border-b border-neutral-400 text-[10px] space-y-0.5">
                 <div className="flex justify-between">
-                  <span>Quote No:</span>
-                  <span className="font-bold">{estimate.estimateNumber}</span>
+                  <span>Doc #:</span>
+                  <span className="font-bold">{currentEstimate.estimateNumber}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Date:</span>
@@ -204,18 +539,18 @@ export default function EstimateModal({
                 </div>
                 <div className="flex justify-between">
                   <span>Customer:</span>
-                  <span className="font-bold">{estimate.customerName}</span>
+                  <span className="font-bold">{currentEstimate.customerName}</span>
                 </div>
-                {estimate.customerMobile && (
+                {currentEstimate.customerMobile && (
                   <div className="flex justify-between">
                     <span>Mobile:</span>
-                    <span>{estimate.customerMobile}</span>
+                    <span>{currentEstimate.customerMobile}</span>
                   </div>
                 )}
-                {estimate.customerGstin && (
+                {currentEstimate.customerGstin && (
                   <div className="flex justify-between">
                     <span>GSTIN:</span>
-                    <span>{estimate.customerGstin}</span>
+                    <span>{currentEstimate.customerGstin}</span>
                   </div>
                 )}
               </div>
@@ -228,7 +563,7 @@ export default function EstimateModal({
                   <span className="w-1/4 text-right">Amount</span>
                 </div>
                 <div className="space-y-1.5 pt-1 text-[10px]">
-                  {(estimate.items || []).map((it, idx) => (
+                  {(currentEstimate.items || []).map((it, idx) => (
                     <div key={idx} className="flex justify-between items-start">
                       <div className="w-1/2">
                         <p className="font-bold">{it.productName}</p>
@@ -237,7 +572,7 @@ export default function EstimateModal({
                         </p>
                       </div>
                       <div className="w-1/4 text-center">
-                        {it.quantity} x ₹{it.unitPrice.toFixed(2)}
+                        {it.quantity % 1 === 0 ? it.quantity : Number(it.quantity.toFixed(3))} x ₹{it.unitPrice.toFixed(2)}
                       </div>
                       <div className="w-1/4 text-right font-bold">
                         ₹{it.totalAmount.toFixed(2)}
@@ -250,226 +585,242 @@ export default function EstimateModal({
               {/* Financial Totals */}
               <div className="py-2 border-b border-neutral-400 space-y-0.5 text-[10px]">
                 <div className="flex justify-between">
-                  <span>Taxable Subtotal:</span>
-                  <span>₹{estimate.subtotal.toFixed(2)}</span>
+                  <span>BILLING AMOUNT (SUBTOTAL):</span>
+                  <span>₹{currentEstimate.subtotal.toFixed(2)}</span>
                 </div>
-                {estimate.discountTotal > 0 && (
+                {currentEstimate.discountTotal > 0 && (
                   <div className="flex justify-between text-neutral-700">
                     <span>Discount:</span>
-                    <span>-₹{estimate.discountTotal.toFixed(2)}</span>
+                    <span>-₹{currentEstimate.discountTotal.toFixed(2)}</span>
                   </div>
                 )}
-                {!estimate.isInterState ? (
+                {!currentEstimate.isInterState ? (
                   <>
                     <div className="flex justify-between">
                       <span>CGST:</span>
-                      <span>₹{estimate.cgstTotal.toFixed(2)}</span>
+                      <span>₹{currentEstimate.cgstTotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>SGST:</span>
-                      <span>₹{estimate.sgstTotal.toFixed(2)}</span>
+                      <span>₹{currentEstimate.sgstTotal.toFixed(2)}</span>
                     </div>
                   </>
                 ) : (
                   <div className="flex justify-between">
                     <span>IGST (Inter-State):</span>
-                    <span>₹{estimate.igstTotal.toFixed(2)}</span>
+                    <span>₹{currentEstimate.igstTotal.toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-xs font-bold pt-1 border-t border-neutral-400">
-                  <span>ESTIMATE TOTAL:</span>
-                  <span>₹{estimate.grandTotal.toFixed(2)}</span>
+                  <span>FINAL PAYABLE AMOUNT:</span>
+                  <span>₹{currentEstimate.grandTotal.toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Estimate Note */}
               <div className="pt-2 text-center text-[9px] text-neutral-600 space-y-1">
-                <p className="font-bold">Prices valid for {estimate.validityDays || 15} days from quote date.</p>
+                <p className="font-bold">Prices valid for {currentEstimate.validityDays || 15} days from quote date.</p>
                 <p>Not a Tax Invoice • For Quotation Purposes Only</p>
               </div>
             </div>
           ) : (
-            /* A4 Formal Quotation Layout */
+            /* A4 Estimate Layout - Exactly Matching User's Image */
             <div
               id="printable-estimate"
-              className="w-[720px] bg-white text-stone-900 p-8 font-sans text-xs shadow-xl rounded-sm border border-stone-200"
+              className="w-[740px] bg-white text-black p-8 font-sans text-xs shadow-xl rounded-sm border border-neutral-300"
             >
-              {/* Header with Luxury Brand Banner */}
-              <div className="flex justify-between items-start pb-6 border-b-2 border-amber-600">
+              {/* Header Section */}
+              <div className="flex justify-between items-start">
                 <div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-stone-950 text-amber-500 font-serif font-black flex items-center justify-center text-sm shadow">
-                      CA
-                    </div>
-                    <h1 className="font-serif text-2xl font-black text-stone-950 tracking-wider">
-                      {business.businessName.toUpperCase()}
-                    </h1>
-                  </div>
-                  <p className="text-[11px] text-stone-600 font-medium mt-1">{business.legalName}</p>
-                  <p className="text-[10px] text-stone-500 max-w-sm mt-0.5 leading-tight">{business.address}</p>
-                  <p className="text-[10px] text-stone-600 mt-1">
-                    <span className="font-semibold">GSTIN:</span> {business.gstin} |{' '}
-                    <span className="font-semibold">Phone:</span> {business.phone}
-                  </p>
-                  <p className="text-[10px] text-stone-600">
-                    <span className="font-semibold">Email:</span> {business.email}
+                  <h1 className="text-2xl font-black text-black tracking-tight uppercase font-sans">
+                    {business.businessName.toUpperCase()}
+                  </h1>
+                  <p className="text-[11px] text-neutral-600 mt-1">
+                    Tel: {business.phone || ''} | GSTIN: {business.gstin || '24AAACA1234A1Z5'}
                   </p>
                 </div>
 
                 <div className="text-right">
-                  <div className="inline-block px-3 py-1 rounded bg-amber-100 text-amber-900 font-bold uppercase tracking-wider text-xs border border-amber-300">
+                  <div className="bg-black text-white px-3.5 py-1 text-xs font-bold tracking-wider uppercase rounded-xs inline-block">
                     ESTIMATE / QUOTATION
                   </div>
-                  <div className="mt-3 space-y-1 text-right font-mono text-[11px]">
+                  <div className="mt-2 text-right text-[11px] space-y-0.5">
                     <p>
-                      <span className="text-stone-500">Estimate No:</span>{' '}
-                      <span className="font-bold text-stone-950">{estimate.estimateNumber}</span>
+                      <span className="font-bold">Doc #:</span>{' '}
+                      <span className="font-mono font-bold text-black">{currentEstimate.estimateNumber}</span>
                     </p>
-                    <p>
-                      <span className="text-stone-500">Date:</span> {dateFormatted}
-                    </p>
-                    <p>
-                      <span className="text-stone-500">Valid Until:</span>{' '}
-                      <span className="font-semibold text-amber-800">{validUntilFormatted}</span>
-                    </p>
-                    <p>
-                      <span className="text-stone-500">Place of Supply:</span>{' '}
-                      <span>{estimate.placeOfSupply || '24-Gujarat'}</span>
+                    <p className="text-neutral-600">
+                      <span>Date:</span> <span>{dateFormatted}</span>
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Customer Info Box */}
-              <div className="my-5 p-3.5 rounded-xl bg-stone-50 border border-stone-200 flex justify-between">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Quotation Prepared For:</p>
-                  <p className="font-bold text-sm text-stone-900 mt-0.5">{estimate.customerName}</p>
-                  {estimate.customerMobile && (
-                    <p className="text-[11px] text-stone-600">Phone: {estimate.customerMobile}</p>
-                  )}
-                  {estimate.customerGstin && (
-                    <p className="text-[11px] font-mono text-stone-700">GSTIN: {estimate.customerGstin}</p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-stone-400">Quotation Status:</p>
-                  <span className="inline-block mt-1 font-bold text-xs uppercase px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                    {estimate.status}
-                  </span>
-                  {estimate.convertedInvoiceId && (
-                    <p className="text-[10px] text-emerald-700 font-mono mt-1">
-                      Converted to Bill: {estimate.convertedInvoiceId}
-                    </p>
-                  )}
-                </div>
+              {/* Heavy Horizontal Divider */}
+              <div className="w-full h-[2px] bg-black my-4" />
+
+              {/* Customer Box */}
+              <div className="w-full border border-neutral-800 p-3 mb-4 rounded-xs bg-white">
+                <p className="text-[10px] uppercase font-bold text-neutral-500 tracking-wider">
+                  CUSTOMER NAME:
+                </p>
+                <p className="text-sm font-bold text-black mt-0.5">
+                  {currentEstimate.customerName || 'Walk-in Customer'}
+                </p>
+                {(currentEstimate.customerMobile || currentEstimate.customerGstin) && (
+                  <p className="text-[11px] text-neutral-600 mt-0.5">
+                    {currentEstimate.customerMobile && <span>Phone: {currentEstimate.customerMobile}</span>}
+                    {currentEstimate.customerMobile && currentEstimate.customerGstin && <span> | </span>}
+                    {currentEstimate.customerGstin && <span>GSTIN: {currentEstimate.customerGstin}</span>}
+                  </p>
+                )}
               </div>
 
-              {/* Items Table */}
-              <table className="w-full text-left border-collapse my-4">
+              {/* Items Grid Table */}
+              <table className="w-full text-left border-collapse border border-black my-2">
                 <thead>
-                  <tr className="bg-stone-900 text-amber-400 text-[10px] uppercase tracking-wider">
-                    <th className="py-2.5 px-3 rounded-l">#</th>
-                    <th className="py-2.5 px-3">Item Description</th>
-                    <th className="py-2.5 px-2">HSN</th>
-                    <th className="py-2.5 px-2 text-right">Qty</th>
-                    <th className="py-2.5 px-3 text-right">Rate (₹)</th>
-                    <th className="py-2.5 px-2 text-center">GST</th>
-                    <th className="py-2.5 px-3 text-right">Taxable (₹)</th>
-                    <th className="py-2.5 px-3 text-right rounded-r">Total (₹)</th>
+                  <tr className="bg-neutral-100 text-black text-[11px] font-bold">
+                    <th className="border border-black py-2.5 px-2 text-center w-10">#</th>
+                    <th className="border border-black py-2.5 px-3">Item Description</th>
+                    <th className="border border-black py-2.5 px-2 text-center w-28">Product Photo</th>
+                    <th className="border border-black py-2.5 px-2 text-center w-12">Qty</th>
+                    <th className="border border-black py-2.5 px-3 text-center w-24">Rate (MRP)</th>
+                    <th className="border border-black py-2.5 px-3 text-center w-20">Discount</th>
+                    <th className="border border-black py-2.5 px-3 text-right w-24">Total (₹)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-stone-200 text-[11px]">
-                  {(estimate.items || []).map((it, idx) => (
-                    <tr key={idx} className="hover:bg-stone-50">
-                      <td className="py-2.5 px-3 text-stone-500">{idx + 1}</td>
-                      <td className="py-2.5 px-3">
-                        <p className="font-bold text-stone-900">{it.productName}</p>
-                        <p className="text-[9px] text-stone-500 font-mono">SKU: {it.sku}</p>
+                <tbody className="text-[11px]">
+                  {(currentEstimate.items || []).map((it, idx) => {
+                    const imgSrc = it.product?.imageUrl || it.imageUrl;
+                    return (
+                      <tr key={idx} className="hover:bg-neutral-50/50">
+                        {/* 1. Index # */}
+                        <td className="border border-black py-3 px-2 text-center font-bold align-middle">
+                          {idx + 1}
+                        </td>
+
+                        {/* 2. Item Description */}
+                        <td className="border border-black py-3 px-3 align-middle">
+                          <p className="font-bold text-xs text-black leading-snug">
+                            {it.productName}
+                          </p>
+                          <p className="text-[10px] text-neutral-500 font-mono mt-0.5">
+                            Code: {it.sku || it.product?.sku || 'N/A'}
+                          </p>
+                        </td>
+
+                        {/* 3. Product Photo */}
+                        <td className="border border-black py-2 px-2 text-center align-middle">
+                          <div className="w-16 h-16 border border-neutral-300 rounded p-0.5 bg-white mx-auto flex items-center justify-center overflow-hidden">
+                            {imgSrc ? (
+                              <img
+                                src={imgSrc}
+                                alt={it.productName}
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <div className="flex flex-col items-center justify-center text-neutral-400">
+                                <Package className="w-5 h-5 stroke-1" />
+                                <span className="text-[8px] mt-0.5">No Photo</span>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 4. Qty */}
+                        <td className="border border-black py-3 px-2 text-center font-bold align-middle text-xs">
+                          {it.quantity % 1 === 0 ? it.quantity : Number(it.quantity.toFixed(3))}
+                        </td>
+
+                        {/* 5. Rate (MRP) */}
+                        <td className="border border-black py-3 px-3 text-center align-middle font-bold text-xs font-sans">
+                          ₹{(it.mrp || it.unitPrice).toLocaleString('en-IN')}
+                        </td>
+
+                        {/* 6. Discount */}
+                        <td className="border border-black py-3 px-3 text-center align-middle font-mono text-xs text-neutral-700">
+                          {it.discountAmount > 0
+                            ? `₹${it.discountAmount.toLocaleString('en-IN')}`
+                            : '-'}
+                        </td>
+
+                        {/* 7. Total (₹) */}
+                        <td className="border border-black py-3 px-3 text-right align-middle font-bold text-xs font-sans">
+                          ₹{it.totalAmount.toLocaleString('en-IN')}
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {/* Summary Row 1: Subtotal */}
+                  <tr className="border-t-2 border-black">
+                    <td
+                      colSpan={6}
+                      className="border border-black py-2.5 px-4 text-right font-bold uppercase tracking-wider text-[11px] text-neutral-800"
+                    >
+                      BILLING AMOUNT (SUBTOTAL)
+                    </td>
+                    <td className="border border-black py-2.5 px-3 text-right font-bold text-xs font-sans">
+                      ₹{currentEstimate.subtotal.toLocaleString('en-IN')}
+                    </td>
+                  </tr>
+
+                  {/* Optional Breakdown: Discount & Taxes */}
+                  {currentEstimate.discountTotal > 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="border border-black py-1.5 px-4 text-right font-semibold text-[10px] text-neutral-600 uppercase"
+                      >
+                        TOTAL DISCOUNT APPLIED
                       </td>
-                      <td className="py-2.5 px-2 font-mono text-stone-600">{it.hsnCode}</td>
-                      <td className="py-2.5 px-2 text-right font-bold text-stone-900">{it.quantity}</td>
-                      <td className="py-2.5 px-3 text-right font-mono">₹{it.unitPrice.toFixed(2)}</td>
-                      <td className="py-2.5 px-2 text-center font-mono text-stone-600">{it.taxRate}%</td>
-                      <td className="py-2.5 px-3 text-right font-mono">₹{it.taxableAmount.toFixed(2)}</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-stone-900">
-                        ₹{it.totalAmount.toFixed(2)}
+                      <td className="border border-black py-1.5 px-3 text-right font-bold text-[11px] text-emerald-800">
+                        -₹{currentEstimate.discountTotal.toLocaleString('en-IN')}
                       </td>
                     </tr>
-                  ))}
+                  )}
+
+                  {currentEstimate.taxTotal > 0 && (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        className="border border-black py-1.5 px-4 text-right font-semibold text-[10px] text-neutral-600 uppercase"
+                      >
+                        {!currentEstimate.isInterState ? 'GST (CGST + SGST)' : 'IGST (Inter-State)'}
+                      </td>
+                      <td className="border border-black py-1.5 px-3 text-right font-bold text-[11px] text-neutral-700">
+                        ₹{currentEstimate.taxTotal.toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* Summary Row 2: Final Grand Total */}
+                  <tr className="border-t-2 border-black bg-neutral-50/80">
+                    <td
+                      colSpan={6}
+                      className="border border-black py-3 px-4 text-right font-black uppercase tracking-wider text-xs text-black"
+                    >
+                      FINAL PAYABLE AMOUNT (GRAND TOTAL)
+                    </td>
+                    <td className="border border-black py-3 px-3 text-right font-black text-sm text-black font-sans">
+                      ₹{currentEstimate.grandTotal.toLocaleString('en-IN')}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
 
-              {/* Totals Summary */}
-              <div className="flex justify-between items-start pt-3 border-t border-stone-200">
-                <div className="w-1/2 space-y-2 text-[10px] text-stone-600">
-                  <p className="font-bold uppercase tracking-wider text-stone-800">Bank & Payment Details for Order Confirmation:</p>
-                  <div className="bg-stone-50 p-2.5 rounded-lg border border-stone-200 font-mono space-y-0.5 text-[9px]">
-                    <p><span className="text-stone-500">Bank:</span> HDFC Bank Ltd | A/C No: 50200012345678</p>
-                    <p><span className="text-stone-500">IFSC:</span> HDFC0001234 | Branch: SG Highway, Ahmedabad</p>
-                    <p><span className="text-stone-500">UPI ID:</span> curatedart@hdfcbank</p>
-                  </div>
-                  {estimate.notes && (
-                    <p className="italic text-stone-500 mt-2">
-                      <span className="font-semibold text-stone-700">Notes:</span> {estimate.notes}
-                    </p>
-                  )}
+              {/* Notes & Terms + Signatory */}
+              <div className="mt-8 pt-4 flex justify-between items-start">
+                <div className="w-7/12 text-[10px] text-neutral-700 space-y-1">
+                  <p className="font-bold text-black uppercase tracking-wider">Notes & Terms:</p>
+                  <p>1. This estimate is valid for {currentEstimate.validityDays || 15} days from the date of issue.</p>
+                  <p>2. Subject to product availability at the time of final confirmation.</p>
                 </div>
 
-                <div className="w-5/12 space-y-1.5 font-mono text-[11px] text-right">
-                  <div className="flex justify-between text-stone-600">
-                    <span>Taxable Subtotal:</span>
-                    <span>₹{estimate.subtotal.toFixed(2)}</span>
-                  </div>
-                  {estimate.discountTotal > 0 && (
-                    <div className="flex justify-between text-emerald-700 font-semibold">
-                      <span>Discount:</span>
-                      <span>-₹{estimate.discountTotal.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {!estimate.isInterState ? (
-                    <>
-                      <div className="flex justify-between text-stone-600">
-                        <span>CGST:</span>
-                        <span>₹{estimate.cgstTotal.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between text-stone-600">
-                        <span>SGST:</span>
-                        <span>₹{estimate.sgstTotal.toFixed(2)}</span>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex justify-between text-stone-600">
-                      <span>IGST (Inter-State):</span>
-                      <span>₹{estimate.igstTotal.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {estimate.roundOff !== 0 && (
-                    <div className="flex justify-between text-stone-500 text-[10px]">
-                      <span>Round Off:</span>
-                      <span>{estimate.roundOff > 0 ? `+₹${estimate.roundOff.toFixed(2)}` : `-₹${Math.abs(estimate.roundOff).toFixed(2)}`}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm font-black text-stone-950 pt-2 border-t-2 border-stone-900 font-serif">
-                    <span>ESTIMATE TOTAL:</span>
-                    <span className="font-mono text-base text-amber-700">₹{estimate.grandTotal.toFixed(2)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quotation Terms & Signature */}
-              <div className="mt-8 pt-4 border-t border-stone-200 flex justify-between items-end">
-                <div className="w-2/3 text-[9px] text-stone-500 space-y-0.5">
-                  <p className="font-bold text-stone-800 uppercase tracking-wider">Quotation Terms & Conditions:</p>
-                  <p>1. This estimate is valid for {estimate.validityDays || 15} days from the date of issue.</p>
-                  <p>2. Physical stock availability is re-confirmed at the time of final booking / payment.</p>
-                  <p>3. Fragile luxury décor is carefully quality-checked and packaged prior to handover.</p>
-                  <p>4. This document is a formal quotation, not a tax invoice. Final GST Tax Invoice issued upon billing.</p>
-                </div>
-                <div className="text-right">
+                <div className="w-5/12 text-right">
                   <div className="h-10"></div>
-                  <p className="text-[10px] font-bold text-stone-900">For CURATED ART</p>
-                  <p className="text-[9px] text-stone-500">Authorized Signatory</p>
+                  <div className="w-48 ml-auto border-b border-black mb-1"></div>
+                  <p className="text-[11px] font-bold text-black">Authorized Signatory</p>
                 </div>
               </div>
             </div>
@@ -478,46 +829,79 @@ export default function EstimateModal({
 
         {/* Modal Bottom Actions Bar */}
         <div className="px-6 py-4 border-t border-stone-800 bg-stone-900 flex flex-wrap items-center justify-between gap-3 print:hidden">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Download PDF Button */}
+            <button
+              onClick={handleDownloadPDF}
+              disabled={downloadingPdf}
+              className="px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer shadow-md"
+              title="Download or save high-resolution PDF with images"
+            >
+              <FileDown className="w-4 h-4" />
+              <span>{downloadingPdf ? 'Preparing PDF...' : 'Download PDF'}</span>
+            </button>
+
+            {/* Download Excel Button */}
+            <button
+              onClick={handleDownloadExcel}
+              disabled={downloadingExcel}
+              className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center gap-2 transition-colors cursor-pointer shadow-md"
+              title="Download estimate line items, MRP, and discount in Excel format"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span>{downloadingExcel ? 'Exporting...' : 'Download Excel'}</span>
+            </button>
+
+            {/* Add / Edit Discount Button */}
+            {currentEstimate.status !== 'CONVERTED' && (
+              <button
+                onClick={() => setIsEditingDiscount(!isEditingDiscount)}
+                className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                  isEditingDiscount
+                    ? 'bg-amber-950 text-amber-400 border-amber-600'
+                    : 'bg-stone-800 hover:bg-stone-700 text-stone-200 border-stone-700'
+                }`}
+                title="Add or update discount on this estimate"
+              >
+                <Tag className="w-3.5 h-3.5 text-amber-400" />
+                <span>{isEditingDiscount ? 'Close Discount Editor' : 'Add / Edit Discount'}</span>
+              </button>
+            )}
+
+            {/* Print Button */}
             <button
               onClick={handlePrint}
-              className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-xs flex items-center gap-2 transition-colors cursor-pointer"
+              className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
             >
-              <Printer className="w-4 h-4 text-amber-400" />
-              <span>Print Quotation</span>
-            </button>
-            <button
-              onClick={handleOpenWhatsApp}
-              className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-xs flex items-center gap-2 transition-colors shadow-md shadow-emerald-950/40 cursor-pointer"
-              title="Open WhatsApp chat with formatted estimate"
-            >
-              <Share2 className="w-4 h-4" />
-              <span>Send on WhatsApp</span>
-            </button>
-            <button
-              onClick={handleCopyWhatsApp}
-              className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Copy WhatsApp text to clipboard"
-            >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-              <span>{copied ? 'Copied!' : 'Copy Text'}</span>
+              <Printer className="w-3.5 h-3.5 text-stone-400" />
+              <span>Print</span>
             </button>
           </div>
 
           <div className="flex items-center gap-2">
-            {estimate.status !== 'CONVERTED' && onConvertToBill && (
+            <button
+              onClick={handleOpenWhatsApp}
+              className="px-3 py-2 rounded-xl bg-emerald-950 border border-emerald-800 hover:bg-emerald-900 text-emerald-300 font-semibold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Open WhatsApp chat with formatted estimate"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span>WhatsApp</span>
+            </button>
+
+            {currentEstimate.status !== 'CONVERTED' && onConvertToBill && (
               <button
                 onClick={handleConvertClick}
                 disabled={converting}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold text-xs tracking-wide flex items-center gap-2 shadow-lg shadow-amber-950/50 transition-all cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold text-xs tracking-wide flex items-center gap-1.5 shadow-lg shadow-amber-950/50 transition-all cursor-pointer disabled:opacity-50"
               >
-                <span>{converting ? 'Converting...' : 'Convert to Final Bill'}</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>{converting ? 'Converting...' : 'Convert to Bill'}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
+
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold cursor-pointer"
+              className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold cursor-pointer"
             >
               Close
             </button>
@@ -527,4 +911,3 @@ export default function EstimateModal({
     </div>
   );
 }
-

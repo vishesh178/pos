@@ -14,7 +14,7 @@
  * @param {boolean} [isInterState=false] - True if customer is outside business state
  */
 function calculateItemGst(item, isInterState = false) {
-  const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
+  const quantity = Math.max(0.0001, parseFloat(item.quantity) || 1);
   const unitPrice = Math.max(0, parseFloat(item.unitPrice) || 0);
   const discountAmount = Math.max(0, parseFloat(item.discountAmount) || 0);
   const gstRate = Math.max(0, parseFloat(item.gstRate) || 0);

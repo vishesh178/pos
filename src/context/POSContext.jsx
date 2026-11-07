@@ -101,7 +101,7 @@ export function POSProvider({ children }) {
         const basePrice = product.mrp || product.sellingPrice || 0;
         const discount = activePricebook?.discountPercentage || 0;
         const calculatedRate =
-          discount > 0 ? Math.round(basePrice * (1 - discount / 100)) : (product.sellingPrice || basePrice);
+          discount > 0 ? Math.round(basePrice * (1 - discount / 100)) : basePrice;
 
         if (existingIdx > -1) {
           const next = [...prev];
@@ -117,6 +117,7 @@ export function POSProvider({ children }) {
               productName: product.name,
               sku: product.sku,
               barcode: product.barcode,
+              imageUrl: product.imageUrl || null,
               hsnCode: product.hsnCode || '9701',
               unitPrice: calculatedRate,
               mrp: basePrice,
@@ -133,7 +134,7 @@ export function POSProvider({ children }) {
   );
 
   const updateQuantity = (productId, quantity) => {
-    const q = parseInt(quantity, 10);
+    const q = parseFloat(quantity);
     if (isNaN(q) || q <= 0) {
       removeFromCart(productId);
       return;
@@ -203,6 +204,7 @@ export function POSProvider({ children }) {
             productName: item.productName,
             sku: item.sku,
             barcode: item.product?.barcode || '',
+            imageUrl: item.product?.imageUrl || item.imageUrl || null,
             hsnCode: item.hsnCode || '9701',
             unitPrice: item.unitPrice,
             mrp: item.mrp || item.unitPrice,

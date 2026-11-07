@@ -92,7 +92,7 @@ router.post('/adjust', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVE
   try {
     const { productId, type, quantity, notes } = req.body;
 
-    if (!productId || !type || quantity === undefined || parseInt(quantity, 10) <= 0) {
+    if (!productId || !type || quantity === undefined || parseFloat(quantity) <= 0) {
       return res.status(400).json({ error: 'Valid productId, adjustment type, and positive quantity are required.' });
     }
 
@@ -101,7 +101,7 @@ router.post('/adjust', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVE
       return res.status(400).json({ error: `Invalid adjustment type. Allowed: ${validTypes.join(', ')}` });
     }
 
-    const adjustmentQty = parseInt(quantity, 10);
+    const adjustmentQty = parseFloat(quantity);
 
     const product = await prisma.product.findUnique({ where: { id: productId } });
     if (!product) {

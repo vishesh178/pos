@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron');
 const path = require('path');
 
 const http = require('http');
@@ -217,6 +217,35 @@ ipcMain.handle('print-receipt', async (event, options = {}) => {
     });
     return { success: true };
   } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('save-pdf', async (event, options = {}) => {
+  if (!mainWindow) return { success: false, error: 'No active window' };
+  try {
+    const filename = options.filename || 'Estimate.pdf';
+    const { filePath, canceled } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save PDF Document',
+      defaultPath: path.join(app.getPath('downloads'), filename),
+      filters: [{ name: 'PDF Documents', extensions: ['pdf'] }],
+    });
+
+    if (canceled || !filePath) {
+      return { canceled: true };
+    }
+
+    const pdfBuffer = await mainWindow.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+      margins: { marginType: 'custom', top: 0.3, bottom: 0.3, left: 0.3, right: 0.3 },
+    });
+
+    const fs = require('fs');
+    await fs.promises.writeFile(filePath, pdfBuffer);
+    return { success: true, filePath };
+  } catch (err) {
+    console.error('Error generating PDF:', err);
     return { success: false, error: err.message };
   }
 });

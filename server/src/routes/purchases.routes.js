@@ -102,7 +102,7 @@ router.post('/orders', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVE
     let taxTotal = 0;
 
     const processedItems = items.map((it) => {
-      const qty = parseInt(it.quantity, 10) || 1;
+      const qty = parseFloat(it.quantity) || 1;
       const cost = parseFloat(it.unitCost) || 0;
       const taxRate = parseFloat(it.taxRate) || 18.0;
       const itemSub = qty * cost;
@@ -209,7 +209,7 @@ router.post('/bills', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVEN
     let taxTotal = 0;
 
     const processedItems = items.map((it) => {
-      const qty = parseInt(it.quantity, 10) || 1;
+      const qty = parseFloat(it.quantity) || 1;
       const cost = parseFloat(it.unitCost) || 0;
       const taxRate = parseFloat(it.taxRate) || 18.0;
       const itemSub = qty * cost;
