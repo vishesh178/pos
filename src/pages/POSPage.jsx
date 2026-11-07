@@ -247,13 +247,27 @@ export default function POSPage() {
   const performSearch = (q = searchQuery, catId = activeCategory) => {
     setLoadingSearch(true);
     const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (catId && catId !== 'all') params.set('categoryId', catId);
 
-    fetch(`/api/pos/search?${params.toString()}`)
+    let url = '';
+    if (catId && catId !== 'all') {
+      if (q && q.trim()) params.set('search', q.trim());
+      params.set('categoryId', catId);
+      params.set('status', 'ACTIVE');
+      url = `/api/products?${params.toString()}`;
+    } else {
+      if (q && q.trim()) params.set('q', q.trim());
+      url = `/api/pos/search?${params.toString()}`;
+    }
+
+    fetch(url)
       .then((r) => r.json())
       .then((items) => {
-        setSearchResults(Array.isArray(items) ? items : []);
+        const productList = Array.isArray(items)
+          ? items
+          : Array.isArray(items?.products)
+          ? items.products
+          : [];
+        setSearchResults(productList);
         setLoadingSearch(false);
       })
       .catch((err) => {
@@ -651,8 +665,13 @@ export default function POSPage() {
   }, [categories]);
 
   const filteredProducts = useMemo(() => {
+    let list = searchResults;
+    if (activeCategory && activeCategory !== 'all') {
+      list = searchResults.filter((p) => p.categoryId === activeCategory);
+    }
+
     // Available products (> 0 in stock) show up first, highest stock first
-    return [...searchResults].sort((a, b) => {
+    return [...list].sort((a, b) => {
       const aStock = parseFloat(a.currentStock) || 0;
       const bStock = parseFloat(b.currentStock) || 0;
       const aInStock = aStock > 0 ? 1 : 0;
@@ -662,7 +681,7 @@ export default function POSPage() {
       }
       return bStock - aStock;
     });
-  }, [searchResults]);
+  }, [searchResults, activeCategory]);
 
   return (
     <div className="h-[calc(100dvh-150px)] md:h-[calc(100vh-100px)] flex flex-col md:flex-row gap-4 md:gap-5 select-none">
