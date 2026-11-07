@@ -123,7 +123,7 @@ export function POSProvider({ children }) {
               mrp: basePrice,
               quantity: qty,
               discountAmount: 0,
-              gstRate: product.gstRate !== undefined ? product.gstRate : 18,
+              gstRate: product.gstRate !== undefined ? product.gstRate : 0,
               isTaxInclusive: false,
             },
           ];
@@ -210,7 +210,7 @@ export function POSProvider({ children }) {
             mrp: item.mrp || item.unitPrice,
             quantity: item.quantity,
             discountAmount: item.discountAmount || 0,
-            gstRate: item.taxRate !== undefined ? item.taxRate : 18,
+            gstRate: item.taxRate !== undefined ? item.taxRate : 0,
             isTaxInclusive: false,
           }))
         );

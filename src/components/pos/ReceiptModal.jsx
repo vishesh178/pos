@@ -148,7 +148,7 @@ export default function ReceiptModal({ isOpen, onClose, invoice, businessProfile
                     <span>-₹{invoice.discountTotal.toFixed(2)}</span>
                   </div>
                 )}
-                {!invoice.isInterState ? (
+                {invoice.taxTotal > 0 && (!invoice.isInterState ? (
                   <>
                     <div className="flex justify-between text-neutral-600">
                       <span>CGST Total:</span>
@@ -164,7 +164,7 @@ export default function ReceiptModal({ isOpen, onClose, invoice, businessProfile
                     <span>IGST Total:</span>
                     <span>₹{invoice.igstTotal.toFixed(2)}</span>
                   </div>
-                )}
+                ))}
                 {invoice.roundOff !== 0 && (
                   <div className="flex justify-between text-neutral-600">
                     <span>Round Off:</span>
@@ -285,7 +285,7 @@ export default function ReceiptModal({ isOpen, onClose, invoice, businessProfile
                     <span>Taxable Amount:</span>
                     <span className="font-mono">₹{invoice.subtotal.toFixed(2)}</span>
                   </div>
-                  {!invoice.isInterState ? (
+                  {invoice.taxTotal > 0 && (!invoice.isInterState ? (
                     <>
                       <div className="flex justify-between text-neutral-700">
                         <span>CGST:</span>
@@ -301,7 +301,7 @@ export default function ReceiptModal({ isOpen, onClose, invoice, businessProfile
                       <span>IGST:</span>
                       <span className="font-mono">₹{invoice.igstTotal.toFixed(2)}</span>
                     </div>
-                  )}
+                  ))}
                   {invoice.roundOff !== 0 && (
                     <div className="flex justify-between text-neutral-700">
                       <span>Round Off:</span>

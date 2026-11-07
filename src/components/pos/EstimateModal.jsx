@@ -229,7 +229,9 @@ export default function EstimateModal({
       (currentEstimate.discountTotal > 0
         ? `*Total Discount:* -₹${currentEstimate.discountTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n`
         : '') +
-      `*GST:* ₹${currentEstimate.taxTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n` +
+      (currentEstimate.taxTotal > 0
+        ? `*GST:* ₹${currentEstimate.taxTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}\n`
+        : '') +
       `*Grand Total: ₹${currentEstimate.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}*\n` +
       `───────────────\n\n` +
       `📍 *Showroom:* ${business.address}\n` +
@@ -594,7 +596,7 @@ export default function EstimateModal({
                     <span>-₹{currentEstimate.discountTotal.toFixed(2)}</span>
                   </div>
                 )}
-                {!currentEstimate.isInterState ? (
+                {currentEstimate.taxTotal > 0 && (!currentEstimate.isInterState ? (
                   <>
                     <div className="flex justify-between">
                       <span>CGST:</span>
@@ -610,7 +612,7 @@ export default function EstimateModal({
                     <span>IGST (Inter-State):</span>
                     <span>₹{currentEstimate.igstTotal.toFixed(2)}</span>
                   </div>
-                )}
+                ))}
                 <div className="flex justify-between text-xs font-bold pt-1 border-t border-neutral-400">
                   <span>FINAL PAYABLE AMOUNT:</span>
                   <span>₹{currentEstimate.grandTotal.toFixed(2)}</span>

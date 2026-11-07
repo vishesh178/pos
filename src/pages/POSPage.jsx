@@ -1017,7 +1017,7 @@ export default function POSPage() {
                     </h5>
                     <div className="flex items-center gap-2 mt-0.5 text-[10px] text-stone-400">
                       <span className="font-mono">{item.sku}</span>
-                      <span>GST: {item.gstRate}%</span>
+                      {item.gstRate > 0 && <span>GST: {item.gstRate}%</span>}
                     </div>
                   </div>
 
@@ -1171,18 +1171,20 @@ export default function POSPage() {
             </div>
           </div>
 
-          {!totals.isInterState ? (
-            <div className="flex justify-between text-stone-400 text-[11px]">
-              <span>CGST + SGST:</span>
-              <span className="font-mono">
-                ₹{(totals.cgstTotal + totals.sgstTotal).toFixed(2)}
-              </span>
-            </div>
-          ) : (
-            <div className="flex justify-between text-stone-400 text-[11px]">
-              <span>IGST (Inter-State):</span>
-              <span className="font-mono">₹{totals.igstTotal.toFixed(2)}</span>
-            </div>
+          {totals.taxTotal > 0 && (
+            !totals.isInterState ? (
+              <div className="flex justify-between text-stone-400 text-[11px]">
+                <span>CGST + SGST:</span>
+                <span className="font-mono">
+                  ₹{(totals.cgstTotal + totals.sgstTotal).toFixed(2)}
+                </span>
+              </div>
+            ) : (
+              <div className="flex justify-between text-stone-400 text-[11px]">
+                <span>IGST (Inter-State):</span>
+                <span className="font-mono">₹{totals.igstTotal.toFixed(2)}</span>
+              </div>
+            )
           )}
 
           {totals.roundOff !== 0 && (

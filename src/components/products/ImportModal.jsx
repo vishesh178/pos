@@ -292,7 +292,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         const cleanStock = typeof rawStock === 'number' ? rawStock : String(rawStock || '').replace(/,/g, '').replace(/[^0-9.-]/g, '');
         const stockVal = cleanStock ? (parseFloat(cleanStock) || 0) : 0;
         const hsnVal = colHsn !== -1 ? String(row[colHsn] || '').trim() : '';
-        const gstVal = colGst !== -1 ? parseFloat(String(row[colGst]).replace(/[^0-9.-]+/g, '')) || 18 : 18;
+        const gstVal = colGst !== -1 ? (parseFloat(String(row[colGst]).replace(/[^0-9.-]+/g, '')) || 0) : 0;
 
         // Match image from row index if drawing anchor was found
         const imageBase64 = rowToImage[r] || null;

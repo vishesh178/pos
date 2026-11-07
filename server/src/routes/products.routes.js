@@ -364,7 +364,7 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTORY'
     const cost = (isAdmin && purchasePrice) ? parseFloat(purchasePrice) : 0.0;
     const price = sellingPrice ? parseFloat(sellingPrice) : 0.0;
     const maxRetail = mrp ? parseFloat(mrp) : price;
-    const gst = gstRate !== undefined ? parseFloat(gstRate) : 18.0;
+    const gst = gstRate !== undefined ? parseFloat(gstRate) : 0.0;
 
     // Transaction to create product + initial opening stock movement + Zoho SyncJob
     const product = await prisma.$transaction(async (tx) => {
@@ -649,7 +649,7 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
             purchasePrice,
             sellingPrice,
             mrp: row.mrp ? parseFloat(row.mrp) : sellingPrice,
-            gstRate: row.gstRate !== undefined ? parseFloat(row.gstRate) : 18.0,
+            gstRate: row.gstRate !== undefined ? parseFloat(row.gstRate) : 0.0,
             hsnCode: row.hsnCode ? String(row.hsnCode).trim() : '9701',
             currentStock,
             minStock: (row.minStock !== undefined && row.minStock !== '') ? parseFloat(String(row.minStock).replace(/,/g, '')) : 5.0,

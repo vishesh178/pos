@@ -456,7 +456,7 @@ export default function ProductsPage() {
                     >
                       {Number(p.currentStock.toFixed(2))} {p.unit}
                     </span>
-                    <p className="text-[9px] text-stone-500 mt-0.5">GST: {p.gstRate}%</p>
+                    {p.gstRate > 0 && <p className="text-[9px] text-stone-500 mt-0.5">GST: {p.gstRate}%</p>}
                   </div>
                 </div>
 

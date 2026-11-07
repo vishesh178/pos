@@ -81,7 +81,7 @@ model Product {
   purchasePrice      Float               @default(0.0)
   sellingPrice       Float               @default(0.0)
   mrp                Float               @default(0.0)
-  gstRate            Float               @default(18.0)
+  gstRate            Float               @default(0.0)
   hsnCode            String              @default("9701")
   currentStock       Float               @default(0.0)
   minStock           Float               @default(5.0)
