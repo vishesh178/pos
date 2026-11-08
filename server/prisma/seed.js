@@ -106,6 +106,23 @@ async function seed() {
   }
   console.log('✓ Home décor categories initialized');
 
+  // 5. Default Pricebooks
+  const defaultPricebooks = [
+    { name: 'Standard Retail (MRP)', code: 'RETAIL', discountPercentage: 0, pricingType: 'DISCOUNT', isDefault: true, isActive: true },
+    { name: 'Interior Designer (20% Off)', code: 'DESIGNER', discountPercentage: 20, pricingType: 'DISCOUNT', isDefault: false, isActive: true },
+    { name: 'Wholesale Bulk (35% Off)', code: 'WHOLESALE', discountPercentage: 35, pricingType: 'DISCOUNT', isDefault: false, isActive: true },
+    { name: 'VIP Privilege (10% Off)', code: 'VIP', discountPercentage: 10, pricingType: 'DISCOUNT', isDefault: false, isActive: true },
+  ];
+
+  for (const pb of defaultPricebooks) {
+    await prisma.pricebook.upsert({
+      where: { code: pb.code },
+      update: {},
+      create: pb,
+    });
+  }
+  console.log('✓ Default Pricebooks initialized');
+
   console.log('Database seeding completed successfully.');
 }
 

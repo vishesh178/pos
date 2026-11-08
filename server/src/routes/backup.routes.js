@@ -4,6 +4,8 @@ const path = require('path');
 const multer = require('multer');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { encryptBuffer, decryptBuffer } = require('../utils/crypto');
+const prisma = require('../prisma');
+const seed = require('../../prisma/seed');
 
 const router = express.Router();
 
@@ -319,6 +321,134 @@ router.post('/upload-restore', authenticateToken, requireRole('ADMIN'), upload.s
       try { fs.unlinkSync(req.file.path); } catch (e) {}
     }
     res.status(500).json({ error: 'Failed to restore database from uploaded file: ' + err.message });
+  }
+});
+
+// POST /api/backup/factory-reset - Nuclear Factory Reset & Complete Data Destruction
+router.post('/factory-reset', authenticateToken, requireRole('ADMIN'), async (req, res) => {
+  try {
+    const { confirmation } = req.body;
+    if (confirmation !== 'DESTROY ALL DATA') {
+      return res.status(400).json({
+        error: 'Confirmation mismatch. You must confirm with "DESTROY ALL DATA" to execute permanent data destruction.',
+      });
+    }
+
+    console.warn('[DANGER ZONE] Nuclear factory reset initiated by admin:', req.user?.email || req.user?.id);
+
+    // 1. Delete all database records across every table
+    // Disable foreign keys temporarily during purge to avoid constraint ordering conflicts
+    await prisma.$executeRawUnsafe('PRAGMA foreign_keys = OFF;');
+    try {
+      await prisma.$transaction([
+        prisma.invoiceItem.deleteMany(),
+        prisma.salesReturnItem.deleteMany(),
+        prisma.salesReturn.deleteMany(),
+        prisma.payment.deleteMany(),
+        prisma.invoice.deleteMany(),
+        prisma.estimateItem.deleteMany(),
+        prisma.estimate.deleteMany(),
+        prisma.purchaseOrderItem.deleteMany(),
+        prisma.purchaseBillItem.deleteMany(),
+        prisma.purchaseBill.deleteMany(),
+        prisma.purchaseOrder.deleteMany(),
+        prisma.stockMovement.deleteMany(),
+        prisma.expense.deleteMany(),
+        prisma.syncJob.deleteMany(),
+        prisma.auditLog.deleteMany(),
+        prisma.product.deleteMany(),
+        prisma.customer.deleteMany(),
+        prisma.supplier.deleteMany(),
+        prisma.pricebook.deleteMany(),
+        prisma.category.deleteMany(),
+        prisma.generalAccount.deleteMany(),
+        prisma.user.deleteMany(),
+        prisma.businessProfile.deleteMany(),
+        prisma.zohoConfig.deleteMany(),
+      ]);
+    } finally {
+      await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');
+    }
+
+    // 2. Re-seed default pristine initial state (Admin: admin@curatedart.in / admin123, Profile, Categories, Pricebooks)
+    await seed();
+
+    // 3. Purge SQLite free-lists and wal logs so deleted data cannot be retrieved by disk scanners
+    try {
+      await prisma.$executeRawUnsafe('PRAGMA secure_delete = ON;');
+      await prisma.$executeRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE);');
+      await prisma.$executeRawUnsafe('VACUUM;');
+    } catch (vacuumErr) {
+      console.warn('SQLite VACUUM warning (non-fatal):', vacuumErr.message);
+    }
+
+    // 4. Permanently destroy all backup snapshots on disk
+    let deletedSnapshotsCount = 0;
+    if (fs.existsSync(BACKUPS_DIR)) {
+      const files = fs.readdirSync(BACKUPS_DIR);
+      for (const file of files) {
+        if (file === '.gitkeep') continue;
+        const filePath = path.join(BACKUPS_DIR, file);
+        try {
+          const stat = fs.statSync(filePath);
+          if (stat.isDirectory()) {
+            fs.rmSync(filePath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(filePath);
+          }
+          deletedSnapshotsCount++;
+        } catch (e) {
+          console.error(`Failed to delete snapshot file ${file}:`, e);
+        }
+      }
+    }
+    // Re-ensure temp directory exists
+    if (!fs.existsSync(TEMP_DIR)) {
+      fs.mkdirSync(TEMP_DIR, { recursive: true });
+    }
+
+    // 5. Permanently destroy all uploaded media and product photos
+    let deletedFilesCount = 0;
+    const UPLOADS_PRODUCTS_DIR = path.resolve(__dirname, '../../uploads/products');
+    if (fs.existsSync(UPLOADS_PRODUCTS_DIR)) {
+      const productFiles = fs.readdirSync(UPLOADS_PRODUCTS_DIR);
+      for (const pFile of productFiles) {
+        if (pFile === '.gitkeep') continue;
+        try {
+          const pPath = path.join(UPLOADS_PRODUCTS_DIR, pFile);
+          if (fs.statSync(pPath).isFile()) {
+            fs.unlinkSync(pPath);
+            deletedFilesCount++;
+          }
+        } catch (e) {
+          console.error(`Failed to delete upload file ${pFile}:`, e);
+        }
+      }
+    }
+    const UPLOADS_DIR = path.resolve(__dirname, '../../uploads');
+    if (fs.existsSync(UPLOADS_DIR)) {
+      const rootUploadFiles = fs.readdirSync(UPLOADS_DIR);
+      for (const rFile of rootUploadFiles) {
+        if (rFile === '.gitkeep' || rFile === 'products') continue;
+        try {
+          const rPath = path.join(UPLOADS_DIR, rFile);
+          if (fs.statSync(rPath).isFile()) {
+            fs.unlinkSync(rPath);
+            deletedFilesCount++;
+          }
+        } catch (e) {}
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'All ERP data, uploaded photos, and backup snapshots have been permanently destroyed. System reset to fresh factory state.',
+      deletedSnapshotsCount,
+      deletedFilesCount,
+    });
+  } catch (err) {
+    console.error('Nuclear factory reset error:', err);
+    res.status(500).json({ error: 'Factory reset failed: ' + err.message });
   }
 });
 

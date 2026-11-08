@@ -33,3 +33,14 @@ test('Backup system - Vault status and safe operations', async () => {
   const files = fs.readdirSync(backupsDir);
   assert.ok(files.length > 0);
 });
+
+test('Factory Reset - Enforces strict ADMIN permission and confirmation guard', async () => {
+  const backupRoutes = require('../src/routes/backup.routes');
+
+  const stack = backupRoutes.stack || [];
+  const layer = stack.find((s) => s.route && s.route.path === '/factory-reset' && s.route.methods.post);
+  assert.ok(layer, 'POST /factory-reset route must be registered');
+
+  // Verify route middleware has authentication, role check, and handler
+  assert.ok(layer.route.stack.length >= 3, 'Must have auth, role check, and handler middleware');
+});

@@ -25,6 +25,7 @@ import {
   Boxes,
   Tag,
   Landmark,
+  AlertTriangle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { downloadExportFile } from '../utils/exportDownloader';
@@ -65,6 +66,12 @@ export default function SettingsPage() {
   const [backupLoading, setBackupLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [restoringFile, setRestoringFile] = useState(false);
+
+  // Danger Zone / Nuclear Reset State
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetConfirmInput, setResetConfirmInput] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccessModal, setResetSuccessModal] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -283,6 +290,33 @@ export default function SettingsPage() {
       alert('Restore failed: ' + err.message);
     } finally {
       setRestoringFile(false);
+    }
+  };
+
+  const handleNuclearFactoryReset = async () => {
+    if (resetConfirmInput !== 'DESTROY ALL DATA') return;
+
+    setIsResetting(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/backup/factory-reset', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ confirmation: resetConfirmInput }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Factory reset failed');
+
+      setIsResetModalOpen(false);
+      setResetSuccessModal(true);
+    } catch (err) {
+      alert('Permanent Destruction Failed: ' + err.message);
+      setIsResetting(false);
     }
   };
 
@@ -775,6 +809,41 @@ export default function SettingsPage() {
               </table>
             </div>
           </div>
+
+          {/* DANGER ZONE: Complete Data & Snapshots Destruction */}
+          <div className="p-6 bg-gradient-to-br from-rose-950/40 via-stone-900 to-stone-900 border-2 border-rose-600/50 rounded-2xl shadow-2xl space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+              <div className="space-y-1.5 max-w-2xl">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border border-rose-500/30">
+                    <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                    <span>Danger Zone • Irreversible Action</span>
+                  </span>
+                </div>
+                <h4 className="font-serif font-bold text-lg text-rose-100 flex items-center gap-2">
+                  <Trash2 className="w-5 h-5 text-rose-500" />
+                  <span>Permanent Data & Snapshot Destruction</span>
+                </h4>
+                <p className="text-xs text-stone-300 leading-relaxed">
+                  Permanently destroys every database record across all tables (all invoices, product catalog, inventory stock movements, customer and vendor ledgers, expenses, sync jobs) and deletes all historical backup snapshots in <code className="text-rose-300 bg-rose-950/60 px-1 py-0.5 rounded font-mono text-[11px]">database/backups/</code> along with all uploaded product images. SQLite free-lists are securely wiped (<code className="text-rose-300 bg-rose-950/60 px-1 py-0.5 rounded font-mono text-[11px]">VACUUM</code> & <code className="text-rose-300 bg-rose-950/60 px-1 py-0.5 rounded font-mono text-[11px]">wal_checkpoint</code>) making any data recovery impossible.
+                </p>
+              </div>
+
+              <div className="shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetConfirmInput('');
+                    setIsResetModalOpen(true);
+                  }}
+                  className="flex items-center gap-2 px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-rose-950/60 transition-all cursor-pointer hover:scale-105 active:scale-95"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Destroy All Data & Snapshots</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1139,6 +1208,115 @@ export default function SettingsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Danger Zone Nuclear Reset Confirmation Modal */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="bg-stone-900 border-2 border-rose-600/70 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-5">
+            <div className="flex items-start justify-between pb-3 border-b border-stone-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-base text-rose-100">
+                    Permanently Destroy All ERP Data?
+                  </h3>
+                  <p className="text-[11px] text-rose-400 font-semibold uppercase tracking-wider">
+                    Irreversible • No Recovery Possible
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => !isResetting && setIsResetModalOpen(false)}
+                disabled={isResetting}
+                className="p-1 text-stone-400 hover:text-stone-200 disabled:opacity-50 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-rose-950/30 border border-rose-800/40 rounded-xl p-3.5 space-y-2 text-xs text-stone-300">
+              <p className="font-bold text-rose-300">The following will be permanently wiped:</p>
+              <ul className="list-disc list-inside space-y-1 text-stone-300 text-[11px]">
+                <li>All Invoices, Estimates, Payments & Sales Returns</li>
+                <li>All Products, Inventory Stock Movements & Catalog entries</li>
+                <li>All Customers, Vendors, and General Accounts</li>
+                <li>All Uploaded Product Images (<span className="font-mono text-stone-400">server/uploads/products/*</span>)</li>
+                <li><strong>All Backup Snapshots & Vault Archives (<span className="font-mono text-stone-400">database/backups/*</span>)</strong></li>
+                <li>SQLite zero-wipe & Vacuum to wipe free-list disk sectors</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-xs font-semibold text-stone-300">
+                To confirm permanent destruction, type <span className="font-mono font-bold text-rose-400 bg-rose-950/60 px-1.5 py-0.5 rounded border border-rose-800/60">DESTROY ALL DATA</span> below:
+              </label>
+              <input
+                type="text"
+                value={resetConfirmInput}
+                onChange={(e) => setResetConfirmInput(e.target.value)}
+                disabled={isResetting}
+                placeholder="DESTROY ALL DATA"
+                className="w-full px-3.5 py-2.5 bg-stone-950 border border-rose-700/60 rounded-xl text-rose-200 font-mono text-sm tracking-wide focus:outline-none focus:border-rose-500 placeholder:text-stone-600"
+                autoFocus
+              />
+            </div>
+
+            <div className="pt-3 border-t border-stone-800 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsResetModalOpen(false)}
+                disabled={isResetting}
+                className="px-4 py-2.5 rounded-xl text-stone-400 hover:text-stone-200 text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                Cancel & Keep Data
+              </button>
+              <button
+                type="button"
+                onClick={handleNuclearFactoryReset}
+                disabled={resetConfirmInput !== 'DESTROY ALL DATA' || isResetting}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-stone-800 disabled:text-stone-500 disabled:cursor-not-allowed text-white font-bold text-xs uppercase tracking-wider shadow-lg shadow-rose-950/50 transition-all cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isResetting ? 'Permanently Destroying...' : 'Confirm & Wipe Everything'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Post-Reset Success Screen */}
+      {resetSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="bg-stone-900 border border-emerald-500/50 rounded-2xl w-full max-w-md p-6 text-center space-y-4 shadow-2xl">
+            <div className="w-14 h-14 mx-auto rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h3 className="font-serif font-bold text-xl text-stone-100">
+              Factory Reset Completed
+            </h3>
+            <p className="text-xs text-stone-300 leading-relaxed">
+              All database tables, uploaded files, and snapshot archives have been permanently destroyed. The ERP is reset to its initial factory clean state.
+            </p>
+            <div className="p-3 bg-stone-950 border border-stone-800 rounded-xl text-left text-xs font-mono text-stone-300 space-y-1">
+              <p className="text-stone-400 text-[10px] uppercase font-bold">Default Admin Login:</p>
+              <p>Email: <span className="text-amber-400">admin@curatedart.in</span></p>
+              <p>Password: <span className="text-amber-400">admin123</span></p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem('curated_art_token');
+                window.location.href = '/';
+              }}
+              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer"
+            >
+              Log in to Fresh System
+            </button>
           </div>
         </div>
       )}
