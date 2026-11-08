@@ -24,6 +24,7 @@ import { useAuth } from '../context/AuthContext';
 import ProductModal from '../components/products/ProductModal';
 import BarcodePrintModal from '../components/products/BarcodePrintModal';
 import ImportModal from '../components/products/ImportModal';
+import CatalogPdfModal from '../components/products/CatalogPdfModal';
 import { compressImageFile } from '../utils/imageCompressor';
 import { downloadExportFile } from '../utils/exportDownloader';
 
@@ -54,6 +55,8 @@ export default function ProductsPage() {
   const [barcodeProductsList, setBarcodeProductsList] = useState([]);
   const [selectedProductIds, setSelectedProductIds] = useState(new Set());
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isCatalogPdfModalOpen, setIsCatalogPdfModalOpen] = useState(false);
+  const [catalogPdfProducts, setCatalogPdfProducts] = useState([]);
 
   const toggleSelectProduct = (id) => {
     setSelectedProductIds((prev) => {
@@ -82,6 +85,28 @@ export default function ProductsPage() {
       setBarcodeProduct(null);
       setBarcodeProductsList(products);
       setIsBarcodeModalOpen(true);
+    }
+  };
+
+  const handleOpenCatalogPdf = () => {
+    if (selectedProductIds.size > 0) {
+      const selected = products.filter((p) => selectedProductIds.has(p.id));
+      setCatalogPdfProducts(selected);
+    } else {
+      setCatalogPdfProducts(products);
+    }
+    setIsCatalogPdfModalOpen(true);
+  };
+
+  const handleOpenSelectedCatalog = () => {
+    if (selectedProductIds.size > 0) {
+      const ids = Array.from(selectedProductIds);
+      try {
+        sessionStorage.setItem('selected_catalog_ids', JSON.stringify(ids));
+      } catch (e) {}
+      navigate(`/wholesale-catalog?ids=${ids.join(',')}`);
+    } else {
+      navigate('/wholesale-catalog');
     }
   };
 
@@ -252,6 +277,19 @@ export default function ProductsPage() {
           )}
 
           <button
+            onClick={handleOpenCatalogPdf}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
+              selectedProductIds.size > 0
+                ? 'bg-amber-500 text-stone-950 border-amber-500 font-bold shadow-md shadow-amber-950/40'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
+            }`}
+            title="Generate Clean PDF Catalog (Image, Name & Price Only)"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>PDF Catalog {selectedProductIds.size > 0 ? `(${selectedProductIds.size})` : ''}</span>
+          </button>
+
+          <button
             onClick={handleOpenBatchBarcodes}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer ${
               selectedProductIds.size > 0
@@ -266,7 +304,7 @@ export default function ProductsPage() {
 
           <button
             onClick={() => navigate('/wholesale-catalog')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 text-xs font-semibold transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-amber-400 hover:border-stone-700 text-xs font-semibold transition-colors cursor-pointer"
             title="Open Wholesale Rate Sheet"
           >
             <BookOpen className="w-3.5 h-3.5" />
@@ -813,6 +851,14 @@ export default function ProductsPage() {
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
           onImported={fetchProducts}
+        />
+      )}
+
+      {isCatalogPdfModalOpen && (
+        <CatalogPdfModal
+          isOpen={isCatalogPdfModalOpen}
+          onClose={() => setIsCatalogPdfModalOpen(false)}
+          products={catalogPdfProducts}
         />
       )}
     </div>

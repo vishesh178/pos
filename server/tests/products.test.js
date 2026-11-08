@@ -169,3 +169,20 @@ test('Role-based security: Only ADMIN receives Purchase Price column in CSV expo
   assert.equal(nonAdminCsvRes.status, 200);
   assert.ok(!nonAdminCsvRes.text.includes('Purchase Price'));
 });
+
+test('Wholesale Catalog: filters correctly by targeted product IDs', async () => {
+  const productsRoutes = require('../src/routes/products.routes');
+  const items = await prisma.product.findMany({ take: 2, select: { id: true, name: true } });
+  if (items.length >= 2) {
+    const targetId = items[0].id;
+    const res = await invokeRoute(productsRoutes, {
+      method: 'GET',
+      path: '/wholesale-catalog',
+      query: { ids: targetId },
+    });
+    assert.equal(res.status, 200);
+    assert.ok(Array.isArray(res.json.items));
+    assert.equal(res.json.items.length, 1);
+    assert.equal(res.json.items[0].id, targetId);
+  }
+});

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
   Printer,
@@ -22,8 +23,10 @@ import {
   ZoomIn,
   X,
   Image as ImageIcon,
+  CheckSquare,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import CatalogPdfModal from '../components/products/CatalogPdfModal';
 
 // Native browser CSV export utility
 function exportToCsv(filename, rows) {
@@ -52,9 +55,15 @@ function exportToCsv(filename, rows) {
 
 export default function WholesaleCatalogPage() {
   const { hasPermission } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [catalogData, setCatalogData] = useState(null);
   const [categories, setCategories] = useState([]);
+
+  // Selected items state for custom targeted catalogs
+  const [selectedItemIds, setSelectedItemIds] = useState(new Set());
+  const [onlySelected, setOnlySelected] = useState(false);
+  const [isCatalogPdfModalOpen, setIsCatalogPdfModalOpen] = useState(false);
 
   // View layout: 'cards' (Lookbook), 'table' (Price List Sheet), 'whatsapp' (Quick Text)
   const [layoutMode, setLayoutMode] = useState('cards');
@@ -87,13 +96,39 @@ export default function WholesaleCatalogPage() {
   const fetchCatalog = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/products/wholesale-catalog?minStock=${minStock}`);
+      const urlIds = searchParams.get('ids');
+      let idParam = '';
+      if (urlIds) {
+        idParam = `&ids=${encodeURIComponent(urlIds)}`;
+      }
+      const res = await fetch(`/api/products/wholesale-catalog?minStock=${minStock}${idParam}`);
       const data = await res.json();
       setCatalogData(data);
 
       const catRes = await fetch('/api/products/categories');
       const catData = await catRes.json();
       setCategories(catData);
+
+      // Initialize selected items from URL query params or sessionStorage
+      if (urlIds) {
+        const idList = urlIds.split(',').map((s) => s.trim()).filter(Boolean);
+        if (idList.length > 0) {
+          setSelectedItemIds(new Set(idList));
+          setOnlySelected(true);
+        }
+      } else {
+        const stored = sessionStorage.getItem('selected_catalog_ids');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setSelectedItemIds(new Set(parsed));
+              setOnlySelected(true);
+              sessionStorage.removeItem('selected_catalog_ids');
+            }
+          } catch (e) {}
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch wholesale catalog:', err);
     } finally {
@@ -106,12 +141,49 @@ export default function WholesaleCatalogPage() {
     const handleInv = () => fetchCatalog();
     window.addEventListener('inventory-updated', handleInv);
     return () => window.removeEventListener('inventory-updated', handleInv);
-  }, [minStock]);
+  }, [minStock, searchParams]);
 
-  // Filtered & computed items
+  // Selection toggle handlers
+  const toggleSelectItem = (id) => {
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    if (!catalogData?.items) return;
+    const allFilteredIds = filteredItems.map((i) => i.id);
+    const allSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedItemIds.has(id));
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        allFilteredIds.forEach((id) => next.delete(id));
+      } else {
+        allFilteredIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedItemIds(new Set());
+    setOnlySelected(false);
+    sessionStorage.removeItem('selected_catalog_ids');
+    if (searchParams.has('ids')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('ids');
+      setSearchParams(next);
+    }
+  };
+
+  // Filtered & computed items (respects onlySelected toggle)
   const filteredItems = useMemo(() => {
     if (!catalogData?.items) return [];
     return catalogData.items.filter((item) => {
+      if (onlySelected && !selectedItemIds.has(item.id)) return false;
       const matchesCat =
         selectedCategory === 'all' || item.categoryName === selectedCategory;
       const q = searchQuery.toLowerCase().trim();
@@ -122,7 +194,7 @@ export default function WholesaleCatalogPage() {
         item.brand.toLowerCase().includes(q);
       return matchesCat && matchesSearch;
     });
-  }, [catalogData, selectedCategory, searchQuery]);
+  }, [catalogData, selectedCategory, searchQuery, onlySelected, selectedItemIds]);
 
   // Adjust price according to discount/surcharge slider
   const getAdjustedPrice = (basePrice) => {
@@ -373,11 +445,12 @@ export default function WholesaleCatalogPage() {
           </button>
 
           <button
-            onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-all shadow-md shadow-amber-950/40"
+            onClick={() => setIsCatalogPdfModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-all shadow-md shadow-amber-950/40 cursor-pointer"
+            title="Generate clean catalog PDF with Image, Name, and Price only"
           >
-            <Printer className="w-3.5 h-3.5" />
-            <span>Print / Save PDF (A4)</span>
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>PDF Catalog (Image, Name & Price)</span>
           </button>
 
           <button
@@ -495,18 +568,75 @@ export default function WholesaleCatalogPage() {
             </button>
           </div>
 
-          {/* Search bar */}
-          <div className="relative flex-1 max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400" />
-            <input
-              type="text"
-              placeholder="Filter by product name, SKU or collection..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-stone-800 border border-stone-700 rounded-xl pl-9 pr-4 py-2 text-xs text-stone-200 placeholder-stone-400 focus:outline-none focus:border-amber-500"
-            />
+          {/* Search bar + Selected Only filter */}
+          <div className="flex items-center gap-2 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400" />
+              <input
+                type="text"
+                placeholder="Filter by product name, SKU or collection..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-stone-800 border border-stone-700 rounded-xl pl-9 pr-4 py-2 text-xs text-stone-200 placeholder-stone-400 focus:outline-none focus:border-amber-500"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedItemIds.size === 0 && !onlySelected) {
+                  selectAllFiltered();
+                  setOnlySelected(true);
+                } else {
+                  setOnlySelected(!onlySelected);
+                }
+              }}
+              className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer ${
+                onlySelected
+                  ? 'bg-amber-500 text-stone-950 border-amber-500 font-bold shadow-md shadow-amber-950/40'
+                  : selectedItemIds.size > 0
+                  ? 'bg-amber-500/10 border-amber-500/40 text-amber-400 hover:bg-amber-500/20'
+                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-stone-200'
+              }`}
+              title="Show only selected items in catalog"
+            >
+              <CheckSquare className="w-3.5 h-3.5" />
+              <span>Selected Only {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}</span>
+            </button>
           </div>
         </div>
+
+        {/* Selected Items Status Banner */}
+        {selectedItemIds.size > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2 text-xs text-amber-300 print:hidden">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>
+                {onlySelected ? (
+                  <>Showing custom catalog of <strong>{filteredItems.length} selected item(s)</strong>. Print, PDF, WhatsApp, HTML lookbook and CSV will include only these items.</>
+                ) : (
+                  <><strong>{selectedItemIds.size} item(s)</strong> selected for custom catalog.</>
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setOnlySelected(!onlySelected)}
+                className="font-bold underline text-amber-400 hover:text-amber-300 cursor-pointer"
+              >
+                {onlySelected ? 'Show All Products' : `Filter to Selected (${selectedItemIds.size})`}
+              </button>
+              <button
+                type="button"
+                onClick={clearSelection}
+                className="text-stone-400 hover:text-rose-400 underline cursor-pointer"
+              >
+                Clear Selection
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Row 2: Category Filter, Min Stock & Price Markup Adjuster */}
         <div className="flex flex-wrap items-center justify-between gap-4 pt-3 border-t border-stone-800/80 text-xs">
@@ -663,8 +793,33 @@ export default function WholesaleCatalogPage() {
                 return (
                   <div
                     key={item.id}
-                    className="group p-4 bg-stone-950/80 border border-stone-800 rounded-2xl flex flex-col justify-between hover:border-amber-500/50 hover:shadow-xl hover:shadow-amber-950/20 transition-all print:bg-white print:border-stone-300 print:text-black print:break-inside-avoid"
+                    className={`group p-4 bg-stone-950/80 border rounded-2xl flex flex-col justify-between hover:shadow-xl hover:shadow-amber-950/20 transition-all print:bg-white print:border-stone-300 print:text-black print:break-inside-avoid relative ${
+                      selectedItemIds.has(item.id)
+                        ? 'border-amber-500/80 bg-amber-950/20 shadow-lg shadow-amber-950/30'
+                        : 'border-stone-800 hover:border-amber-500/50'
+                    }`}
                   >
+                    {/* Item Selection Checkbox (Hidden in Print) */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSelectItem(item.id);
+                      }}
+                      className={`absolute top-3 left-3 z-20 w-6 h-6 rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                        selectedItemIds.has(item.id)
+                          ? 'bg-amber-500 text-stone-950 shadow-md ring-2 ring-amber-400'
+                          : 'bg-black/75 text-stone-400 hover:text-white border border-stone-600 hover:border-amber-400'
+                      } print:hidden`}
+                      title={selectedItemIds.has(item.id) ? 'Deselect from catalog' : 'Select for custom catalog'}
+                    >
+                      <Check
+                        className={`w-3.5 h-3.5 stroke-[3] ${
+                          selectedItemIds.has(item.id) ? 'opacity-100' : 'opacity-0 hover:opacity-50'
+                        }`}
+                      />
+                    </button>
+
                     <div>
                       {/* Product Photo with Hover Zoom & Stock Pill */}
                       {showImages && (
@@ -771,6 +926,15 @@ export default function WholesaleCatalogPage() {
             <table className="w-full text-left text-xs print:text-[10px]">
               <thead className="bg-stone-950 border-y border-stone-800 text-[10px] uppercase font-bold text-stone-400 print:bg-stone-100 print:text-black print:border-black">
                 <tr>
+                  <th className="px-3 py-2.5 text-center w-10 print:hidden">
+                    <input
+                      type="checkbox"
+                      checked={filteredItems.length > 0 && filteredItems.every((it) => selectedItemIds.has(it.id))}
+                      onChange={selectAllFiltered}
+                      className="accent-amber-500 rounded cursor-pointer"
+                      title="Select / Deselect All Filtered Items"
+                    />
+                  </th>
                   {showImages && <th className="px-3 py-2.5 text-center w-16">Photo</th>}
                   <th className="px-3 py-2.5">SKU / Code</th>
                   <th className="px-4 py-2.5">Product Name & Specifications</th>
@@ -788,7 +952,7 @@ export default function WholesaleCatalogPage() {
               <tbody className="divide-y divide-stone-800 text-stone-300 font-mono print:divide-stone-300 print:text-black">
                 {filteredItems.length === 0 ? (
                   <tr>
-                    <td colSpan={showImages ? 10 : 9} className="text-center py-8 text-stone-400 font-sans">
+                    <td colSpan={showImages ? 11 : 10} className="text-center py-8 text-stone-400 font-sans">
                       No available stock found for this selection.
                     </td>
                   </tr>
@@ -798,8 +962,21 @@ export default function WholesaleCatalogPage() {
                     return (
                       <tr
                         key={item.id}
-                        className="hover:bg-stone-800/40 print:hover:bg-transparent"
+                        className={`hover:bg-stone-800/40 print:hover:bg-transparent transition-colors ${
+                          selectedItemIds.has(item.id) ? 'bg-amber-950/20' : ''
+                        }`}
                       >
+                        {/* Checkbox for custom catalog selection */}
+                        <td className="px-3 py-2 text-center print:hidden">
+                          <input
+                            type="checkbox"
+                            checked={selectedItemIds.has(item.id)}
+                            onChange={() => toggleSelectItem(item.id)}
+                            className="accent-amber-500 rounded cursor-pointer"
+                            title={selectedItemIds.has(item.id) ? 'Deselect item' : 'Select for custom catalog'}
+                          />
+                        </td>
+
                         {/* High-Resolution Thumbnail Image */}
                         {showImages && (
                           <td className="px-3 py-2 text-center">
@@ -1042,6 +1219,16 @@ export default function WholesaleCatalogPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Clean PDF Catalog Modal (Image, Name & Price Only) */}
+      {isCatalogPdfModalOpen && (
+        <CatalogPdfModal
+          isOpen={isCatalogPdfModalOpen}
+          onClose={() => setIsCatalogPdfModalOpen(false)}
+          products={filteredItems}
+          businessProfile={business}
+        />
       )}
     </div>
   );

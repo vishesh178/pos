@@ -220,15 +220,25 @@ router.get('/', optionalAuth, async (req, res) => {
 // GET /api/products/wholesale-catalog - Daily available in-stock items with wholesale pricing
 router.get('/wholesale-catalog', async (req, res) => {
   try {
-    const { categoryId, minStock = 1 } = req.query;
+    const { categoryId, minStock = 1, ids } = req.query;
     const minStockParsed = (minStock !== undefined && minStock !== '') ? parseFloat(minStock) : 0.0001;
     const where = {
       status: 'ACTIVE',
-      currentStock: { gte: isNaN(minStockParsed) ? 0.0001 : minStockParsed },
     };
 
-    if (categoryId && categoryId !== 'all') {
-      where.categoryId = categoryId;
+    if (ids) {
+      const idList = String(ids)
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (idList.length > 0) {
+        where.id = { in: idList };
+      }
+    } else {
+      where.currentStock = { gte: isNaN(minStockParsed) ? 0.0001 : minStockParsed };
+      if (categoryId && categoryId !== 'all') {
+        where.categoryId = categoryId;
+      }
     }
 
     const items = await prisma.product.findMany({
