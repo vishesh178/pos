@@ -88,10 +88,23 @@ export default function ProductsPage() {
     }
   };
 
-  const handleOpenCatalogPdf = () => {
+  const handleOpenCatalogPdf = async () => {
     if (selectedProductIds.size > 0) {
+      const ids = Array.from(selectedProductIds);
+      // Fetch full details of all selected IDs from backend so no item is lost due to pagination/search
+      try {
+        const res = await fetch(`/api/products/wholesale-catalog?ids=${ids.join(',')}`);
+        const data = await res.json();
+        if (data && Array.isArray(data.items) && data.items.length > 0) {
+          setCatalogPdfProducts(data.items);
+          setIsCatalogPdfModalOpen(true);
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to fetch selected catalog items:', err);
+      }
       const selected = products.filter((p) => selectedProductIds.has(p.id));
-      setCatalogPdfProducts(selected);
+      setCatalogPdfProducts(selected.length > 0 ? selected : products);
     } else {
       setCatalogPdfProducts(products);
     }

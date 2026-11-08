@@ -450,8 +450,18 @@ export default function WholesaleCatalogPage() {
             title="Generate clean catalog PDF with Image, Name, and Price only"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>PDF Catalog (Image, Name & Price)</span>
+            <span>PDF Catalog {selectedItemIds.size > 0 ? `(${selectedItemIds.size})` : ''}</span>
           </button>
+
+          {searchParams.has('ids') && (
+            <button
+              onClick={clearSelection}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-amber-500/40 text-amber-300 hover:text-white text-xs font-semibold transition-colors cursor-pointer"
+              title="Clear direct link filter and show all available products"
+            >
+              <span>Load Full Showroom</span>
+            </button>
+          )}
 
           <button
             onClick={handleExportCsv}
@@ -1226,7 +1236,11 @@ export default function WholesaleCatalogPage() {
         <CatalogPdfModal
           isOpen={isCatalogPdfModalOpen}
           onClose={() => setIsCatalogPdfModalOpen(false)}
-          products={filteredItems}
+          products={
+            selectedItemIds.size > 0
+              ? (catalogData?.items || []).filter((it) => selectedItemIds.has(it.id))
+              : filteredItems
+          }
           businessProfile={business}
         />
       )}
