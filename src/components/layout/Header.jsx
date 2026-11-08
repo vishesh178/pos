@@ -21,10 +21,30 @@ export default function Header({ onOpenMobileMenu }) {
   const { user } = useAuth();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
+  const [businessProfile, setBusinessProfile] = useState(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const fetchProfile = () => {
+      fetch('/api/business/profile')
+        .then((res) => res.json())
+        .then((data) => setBusinessProfile(data))
+        .catch((err) => console.error('Failed to fetch showroom profile in header:', err));
+    };
+
+    fetchProfile();
+
+    const handleProfileUpdate = (e) => {
+      if (e.detail) setBusinessProfile(e.detail);
+      else fetchProfile();
+    };
+
+    window.addEventListener('business-profile-updated', handleProfileUpdate);
+    return () => window.removeEventListener('business-profile-updated', handleProfileUpdate);
   }, []);
 
   const routeTitles = {
@@ -79,8 +99,8 @@ export default function Header({ onOpenMobileMenu }) {
               <span className="sm:hidden">{mobileRouteTitles[location.pathname] || 'Curated Art'}</span>
               <span className="hidden sm:inline">{title}</span>
             </h2>
-            <p className="text-[11px] text-stone-400 hidden sm:block">
-              Showroom #104, Design District, SG Highway, Ahmedabad
+            <p className="text-[11px] text-stone-400 hidden sm:block truncate max-w-xs md:max-w-md lg:max-w-xl" title={businessProfile?.address || ''}>
+              {businessProfile?.address || 'Curated Art Showroom'}
             </p>
           </div>
         </div>

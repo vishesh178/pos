@@ -115,6 +115,9 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to update profile');
 
+      // Notify header and all active components of the updated business profile
+      window.dispatchEvent(new CustomEvent('business-profile-updated', { detail: data }));
+
       setMessage('Business profile and invoice preferences saved.');
     } catch (err) {
       setError(err.message);

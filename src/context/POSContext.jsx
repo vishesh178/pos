@@ -28,6 +28,11 @@ export function POSProvider({ children }) {
       .then((data) => setBusinessProfile(data))
       .catch((err) => console.error('Failed to fetch business profile in POS:', err));
 
+    const handleProfileUpdate = (e) => {
+      if (e.detail) setBusinessProfile(e.detail);
+    };
+    window.addEventListener('business-profile-updated', handleProfileUpdate);
+
     fetch('/api/pricebooks')
       .then((res) => res.json())
       .then((data) => {
@@ -38,6 +43,8 @@ export function POSProvider({ children }) {
         }
       })
       .catch((err) => console.error('Failed to load pricebooks in POS:', err));
+
+    return () => window.removeEventListener('business-profile-updated', handleProfileUpdate);
   }, []);
 
   const businessStateCode = businessProfile ? businessProfile.stateCode : '24';

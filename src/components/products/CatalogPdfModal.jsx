@@ -18,10 +18,22 @@ export default function CatalogPdfModal({
   const [priceType, setPriceType] = useState('mrp'); // 'mrp', 'sellingPrice', 'wholesalePrice'
   const [showSku, setShowSku] = useState(true);
   const [showBusinessHeader, setShowBusinessHeader] = useState(true);
+  const [liveBiz, setLiveBiz] = useState(businessProfile);
+
+  React.useEffect(() => {
+    if (businessProfile) {
+      setLiveBiz(businessProfile);
+    } else {
+      fetch('/api/business/profile')
+        .then((res) => res.json())
+        .then((data) => setLiveBiz(data))
+        .catch((err) => console.error('Failed to load profile in CatalogPdfModal:', err));
+    }
+  }, [businessProfile]);
 
   if (!isOpen) return null;
 
-  const biz = businessProfile || {
+  const biz = liveBiz || businessProfile || {
     businessName: 'Curated Art',
     legalName: 'Curated Art Luxury Decor Pvt Ltd',
     address: 'Showroom #104, Design District, SG Highway, Ahmedabad, Gujarat - 380054',
