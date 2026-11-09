@@ -138,8 +138,18 @@ test('POS invoice generation produces sequential numbering and atomic stock move
 });
 
 test('Smart Invoice Search resolves exact, lowercase, prefix-typo, pure digits, and returns nearest matches for non-existent queries', async () => {
-  const existingInv = await prisma.invoice.findFirst();
-  const targetNum = existingInv ? existingInv.invoiceNumber : 'CA-1001';
+  let existingInv = await prisma.invoice.findFirst();
+  if (!existingInv) {
+    existingInv = await prisma.invoice.create({
+      data: {
+        invoiceNumber: 'CA-1001',
+        customerName: 'Test Walk-in',
+        subtotal: 1000,
+        grandTotal: 1000,
+      },
+    });
+  }
+  const targetNum = existingInv.invoiceNumber;
   const digitsOnly = targetNum.replace(/\D/g, '');
   const prefix = targetNum.split('-')[0] || 'CA';
 

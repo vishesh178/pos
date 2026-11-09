@@ -70,6 +70,27 @@ test('Data Export Engine - Generates Valid Multi-Tab Excel Workbook', async () =
 });
 
 test('Customer / Account Directory Export - Formatted Categorized Account List with Merges and 10 Columns', async () => {
+  // Ensure test fixture records exist if db was wiped
+  if (await prisma.supplier.count() === 0) {
+    await prisma.supplier.create({
+      data: { name: 'Test Supplier Ltd', mobile: '9898000001' },
+    });
+  }
+  if (await prisma.customer.count() === 0) {
+    await prisma.customer.create({
+      data: { name: 'Test Retail Customer', mobile: '9898000002', customerType: 'RETAIL' },
+    });
+  }
+  if (await prisma.generalAccount.count() === 0) {
+    await prisma.generalAccount.createMany({
+      data: [
+        { name: 'Owner Equity', section: 'Capital', accountGroup: 'Capital' },
+        { name: 'HDFC Loan', section: 'Unsecured Loans', accountGroup: 'Loans & Liabilities' },
+        { name: 'SBI Current A/c', section: 'Cash at Bank', accountGroup: 'Bank & Cash' },
+      ],
+    });
+  }
+
   const [bp, customers, suppliers, generalAccounts] = await Promise.all([
     prisma.businessProfile.findFirst(),
     prisma.customer.findMany({ orderBy: { name: 'asc' } }),

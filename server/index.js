@@ -28,8 +28,10 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(auditMiddleware);
 
-// Static uploads directory (product images, receipts)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Static uploads directory (product images, receipts) with 7-day browser caching
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  maxAge: '7d',
+}));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -90,10 +92,21 @@ app.use('/api/pricebooks', pricebooksRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/general-accounts', generalAccountsRoutes);
 
-// Serve static client build if available
+// Serve static client build with optimized HTTP cache controls
 const distPath = path.resolve(__dirname, '../dist');
-app.use(express.static(distPath));
-app.use('/assets', express.static(path.join(distPath, 'assets')));
+app.use(express.static(distPath, {
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    // HTML index should revalidate so client gets software updates immediately
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
+app.use('/assets', express.static(path.join(distPath, 'assets'), {
+  maxAge: '1y',
+  immutable: true,
+}));
 
 // Ensure assets are served even when loaded from nested SPA routes (e.g. /zoho-sync/assets/...)
 app.use((req, res, next) => {
