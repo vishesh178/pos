@@ -12,6 +12,7 @@ import {
   ShoppingBag,
   ArrowRight,
   Search,
+  Sparkles,
 } from 'lucide-react';
 
 // Web Audio API instant chime on successful barcode detection
@@ -50,15 +51,18 @@ export default function BarcodeScannerModal({
 }) {
   const [scannerReady, setScannerReady] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isHttpOrigin, setIsHttpOrigin] = useState(false);
   const [lastScanned, setLastScanned] = useState(null); // { code, product, timestamp, status: 'found'|'not_found' }
   const [manualCode, setManualCode] = useState('');
   const [searchingManual, setSearchingManual] = useState(false);
+  const [scanningPhoto, setScanningPhoto] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [cameras, setCameras] = useState([]);
   const [activeCameraIdx, setActiveCameraIdx] = useState(0);
 
   const html5QrCodeRef = useRef(null);
+  const fileInputRef = useRef(null);
   const lastScannedTimeRef = useRef({});
   const isProcessingRef = useRef(false);
 
@@ -85,7 +89,6 @@ export default function BarcodeScannerModal({
         const items = await res.json();
 
         if (Array.isArray(items) && items.length > 0) {
-          // Exact or best match found
           const matched = items[0];
           onProductScanned?.(matched);
           setLastScanned({
@@ -120,6 +123,49 @@ export default function BarcodeScannerModal({
     [onProductScanned]
   );
 
+  // Snap photo file fallback (works 100% on HTTP and all mobile browsers)
+  const handlePhotoCapture = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setScanningPhoto(true);
+    setErrorMessage('');
+
+    try {
+      const scannerId = 'curated-art-barcode-reader';
+      let scanner = html5QrCodeRef.current;
+      if (!scanner) {
+        scanner = new Html5Qrcode(scannerId, {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.QR_CODE,
+          ],
+          verbose: false,
+        });
+        html5QrCodeRef.current = scanner;
+      }
+
+      const decodedText = await scanner.scanFile(file, false);
+      await handleLookupAndAdd(decodedText);
+    } catch (err) {
+      console.warn('Barcode photo decode error:', err);
+      setLastScanned({
+        code: 'Photo Tag',
+        product: null,
+        status: 'not_found',
+        timestamp: Date.now(),
+      });
+    } finally {
+      setScanningPhoto(false);
+      e.target.value = '';
+    }
+  };
+
   // Initialize camera scanner when modal opens
   useEffect(() => {
     if (!isOpen) return;
@@ -128,10 +174,26 @@ export default function BarcodeScannerModal({
     setErrorMessage('');
     setLastScanned(null);
     setScannerReady(false);
+    setIsHttpOrigin(false);
 
     const initScanner = async () => {
+      // Check if browser allows live camera streaming on this origin
+      const isLocal =
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+      const isSecure = window.isSecureContext || isLocal;
+
+      if (!isSecure || !navigator.mediaDevices?.getUserMedia) {
+        if (isMounted) {
+          setIsHttpOrigin(true);
+          setErrorMessage(
+            'Live continuous video requires HTTPS. Use the direct Camera Snap button below (works over local Wi-Fi HTTP):'
+          );
+        }
+        return;
+      }
+
       try {
-        // Enumerate video input devices
         const devices = await Html5Qrcode.getCameras();
         if (!devices || devices.length === 0) {
           throw new Error('No camera found on this device.');
@@ -139,12 +201,12 @@ export default function BarcodeScannerModal({
 
         if (isMounted) setCameras(devices);
 
-        // Prefer rear/environment camera
         let selectedCam = devices[0].id;
-        const rearCamIdx = devices.findIndex((d) =>
-          d.label?.toLowerCase().includes('back') ||
-          d.label?.toLowerCase().includes('rear') ||
-          d.label?.toLowerCase().includes('environment')
+        const rearCamIdx = devices.findIndex(
+          (d) =>
+            d.label?.toLowerCase().includes('back') ||
+            d.label?.toLowerCase().includes('rear') ||
+            d.label?.toLowerCase().includes('environment')
         );
         if (rearCamIdx > -1) {
           selectedCam = devices[rearCamIdx].id;
@@ -170,7 +232,6 @@ export default function BarcodeScannerModal({
         const config = {
           fps: 15,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
-            // Horizontal rectangular target for standard shelf barcode labels
             const width = Math.min(viewfinderWidth * 0.85, 320);
             const height = Math.min(viewfinderHeight * 0.45, 180);
             return { width: Math.round(width), height: Math.round(height) };
@@ -184,15 +245,11 @@ export default function BarcodeScannerModal({
           (decodedText) => {
             handleLookupAndAdd(decodedText);
           },
-          () => {
-            // frame scanning (no code detected in frame)
-          }
+          () => {}
         );
 
         if (isMounted) {
           setScannerReady(true);
-
-          // Check if camera supports torch/flashlight
           try {
             const track = html5QrCode.getRunningTrackCameraCapabilities?.();
             if (track && track.torchFeature?.().isSupported?.()) {
@@ -203,15 +260,14 @@ export default function BarcodeScannerModal({
       } catch (err) {
         console.error('Failed to start barcode camera:', err);
         if (isMounted) {
+          setIsHttpOrigin(true);
           setErrorMessage(
-            err.message ||
-              'Could not access camera. Please allow camera permissions in your mobile browser.'
+            'Live video stream is restricted on HTTP. Tap the Camera Snap button below to take a quick photo of the barcode:'
           );
         }
       }
     };
 
-    // Small delay to ensure DOM element exists
     const timer = setTimeout(initScanner, 100);
 
     return () => {
@@ -284,6 +340,16 @@ export default function BarcodeScannerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-stone-100 animate-in fade-in duration-200">
+      {/* Hidden Native Camera Photo Input (Works 100% on HTTP and all devices) */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handlePhotoCapture}
+      />
+
       {/* Top Mobile App Bar */}
       <div className="h-14 px-4 bg-stone-900/90 backdrop-blur-md border-b border-stone-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -336,24 +402,22 @@ export default function BarcodeScannerModal({
       </div>
 
       {/* Main Viewfinder Section */}
-      <div className="flex-1 relative flex items-center justify-center overflow-hidden bg-black">
+      <div className="flex-1 relative flex items-center justify-center overflow-hidden bg-black p-4">
         {/* html5-qrcode video viewport container */}
         <div
           id="curated-art-barcode-reader"
           className="w-full max-w-md h-full max-h-[70vh] overflow-hidden flex items-center justify-center"
         />
 
-        {/* Laser HUD Frame Overlay */}
-        {scannerReady && !errorMessage && (
+        {/* Laser HUD Frame Overlay (When Live Video is Running) */}
+        {scannerReady && !errorMessage && !isHttpOrigin && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
             <div className="relative w-72 h-44 border-2 border-amber-500/80 rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.35)] flex items-center justify-center overflow-hidden">
-              {/* Corner Accents */}
               <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-400 rounded-tl-xl" />
               <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-400 rounded-tr-xl" />
               <div className="absolute bottom-0 left-0 w-4 h-4 border-b-4 border-l-4 border-amber-400 rounded-bl-xl" />
               <div className="absolute bottom-0 right-0 w-4 h-4 border-b-4 border-r-4 border-amber-400 rounded-br-xl" />
 
-              {/* Animated Laser Sweep Line */}
               <div className="absolute w-full h-0.5 bg-gradient-to-r from-transparent via-amber-400 to-transparent shadow-[0_0_12px_#f59e0b] animate-bounce" />
 
               <span className="text-[11px] font-mono font-semibold text-amber-300/80 tracking-wider uppercase bg-black/60 px-2 py-0.5 rounded-full backdrop-blur-xs">
@@ -363,16 +427,34 @@ export default function BarcodeScannerModal({
           </div>
         )}
 
-        {/* Error Notice if Camera Blocked */}
-        {errorMessage && (
-          <div className="absolute inset-x-4 max-w-sm mx-auto p-4 bg-stone-900 border border-rose-600/60 rounded-2xl text-center space-y-3 z-20">
-            <div className="w-10 h-10 mx-auto rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center">
-              <AlertCircle className="w-6 h-6" />
+        {/* HTTP / Mobile Fallback UI (Instant Camera Snap Button) */}
+        {(isHttpOrigin || errorMessage) && (
+          <div className="absolute inset-x-4 max-w-sm mx-auto p-6 bg-stone-900 border-2 border-amber-500/50 rounded-3xl text-center space-y-4 shadow-2xl z-20">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 shadow-lg shadow-amber-950/50">
+              <Camera className="w-8 h-8" />
             </div>
-            <p className="text-xs text-stone-200">{errorMessage}</p>
-            <p className="text-[11px] text-stone-400">
-              You can also type the barcode or SKU directly below:
-            </p>
+
+            <div className="space-y-1.5">
+              <h4 className="font-serif font-bold text-base text-stone-100">
+                Snap Barcode with Phone Camera
+              </h4>
+              <p className="text-xs text-stone-300 leading-relaxed">
+                Mobile browsers require HTTPS for live video on local IP (<code className="text-amber-400 font-mono text-[11px] bg-stone-950 px-1 py-0.5 rounded">192.168.1.43</code>).
+              </p>
+              <p className="text-[11px] text-amber-300/90 font-medium">
+                Tap below to open your phone camera and snap the barcode tag:
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={scanningPhoto}
+              className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold text-sm tracking-wide shadow-xl shadow-amber-950/60 flex items-center justify-center gap-2.5 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+            >
+              <Camera className="w-5 h-5" />
+              <span>{scanningPhoto ? 'Decoding Barcode...' : 'Open Camera to Snap Barcode'}</span>
+            </button>
           </div>
         )}
 
@@ -380,7 +462,7 @@ export default function BarcodeScannerModal({
         {lastScanned && (
           <div className="absolute top-4 inset-x-4 max-w-md mx-auto z-30 animate-in slide-in-from-top-4 duration-150">
             {lastScanned.status === 'found' ? (
-              <div className="p-3 bg-emerald-950/90 border border-emerald-500/60 rounded-2xl shadow-xl backdrop-blur-md flex items-center gap-3">
+              <div className="p-3 bg-emerald-950/95 border border-emerald-500/60 rounded-2xl shadow-xl backdrop-blur-md flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-stone-900 border border-emerald-500/40 overflow-hidden shrink-0 flex items-center justify-center">
                   {lastScanned.product?.imageUrl ? (
                     <img
@@ -425,26 +507,39 @@ export default function BarcodeScannerModal({
 
       {/* Bottom Control & Cart Tray */}
       <div className="p-4 bg-stone-900 border-t border-stone-800 space-y-3 shrink-0">
-        {/* Manual Code Input Bar (Fallback) */}
-        <form onSubmit={handleManualSubmit} className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-stone-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              value={manualCode}
-              onChange={(e) => setManualCode(e.target.value)}
-              placeholder="Or type Barcode / SKU (e.g. BK-2224)..."
-              className="w-full pl-9 pr-3 py-2 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-xs font-mono focus:outline-none focus:border-amber-500 placeholder:text-stone-500"
-            />
-          </div>
+        {/* Quick Snap & Manual Code Input Bar */}
+        <div className="flex items-center gap-2">
           <button
-            type="submit"
-            disabled={searchingManual || !manualCode.trim()}
-            className="px-4 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 disabled:opacity-50 text-stone-200 text-xs font-semibold cursor-pointer shrink-0"
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={scanningPhoto}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500 border border-amber-500/40 text-amber-400 hover:text-stone-950 text-xs font-bold shrink-0 transition-colors cursor-pointer"
+            title="Snap photo with camera"
           >
-            {searchingManual ? 'Adding...' : 'Add'}
+            <Camera className="w-4 h-4" />
+            <span>Snap Tag</span>
           </button>
-        </form>
+
+          <form onSubmit={handleManualSubmit} className="flex-1 flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                value={manualCode}
+                onChange={(e) => setManualCode(e.target.value)}
+                placeholder="Or type SKU (e.g. BK-2224)..."
+                className="w-full pl-8 pr-2.5 py-1.5 bg-stone-950 border border-stone-700 rounded-xl text-stone-100 text-xs font-mono focus:outline-none focus:border-amber-500 placeholder:text-stone-500"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={searchingManual || !manualCode.trim()}
+              className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 disabled:opacity-50 text-stone-200 text-xs font-semibold cursor-pointer shrink-0"
+            >
+              {searchingManual ? '...' : 'Add'}
+            </button>
+          </form>
+        </div>
 
         {/* Live Estimate Summary & Review CTA */}
         <div className="flex items-center justify-between gap-3 pt-1">
