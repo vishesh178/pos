@@ -276,11 +276,24 @@ export default function ProductsPage() {
         },
         body: JSON.stringify({ productId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to generate AI mockup');
+      
+      const resText = await res.text();
+      let resData = {};
+      try {
+        resData = JSON.parse(resText);
+      } catch (_) {
+        if (!res.ok) {
+          throw new Error(`Server returned status ${res.status}. Please make sure the server has been restarted (pm2 restart all).`);
+        }
+        throw new Error('Invalid response from server.');
+      }
+
+      if (!res.ok) {
+        throw new Error(resData.error || `Server error (${res.status})`);
+      }
 
       setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, imageUrl: data.imageUrl } : p))
+        prev.map((p) => (p.id === productId ? { ...p, imageUrl: resData.imageUrl } : p))
       );
       alert('✨ AI Mockup generated successfully!');
     } catch (err) {
