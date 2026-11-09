@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   ShoppingCart,
@@ -24,11 +25,14 @@ import {
   UserPlus,
   Phone,
   CheckCircle2,
+  Camera,
+  Barcode,
 } from 'lucide-react';
 import { usePOS } from '../context/POSContext';
 import { useAuth } from '../context/AuthContext';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import EstimateModal from '../components/pos/EstimateModal';
+import BarcodeScannerModal from '../components/pos/BarcodeScannerModal';
 
 const INDIAN_STATES = [
   { name: 'Gujarat', code: '24', isIntra: true },
@@ -79,12 +83,21 @@ export default function POSPage() {
     businessProfile,
   } = usePOS();
 
+  const [searchParams] = useSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [categories, setCategories] = useState([]);
   const [activeCategory, setActiveCategory] = useState('all');
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [mobileTab, setMobileTab] = useState('catalog'); // 'catalog' | 'cart'
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+
+  // Auto-open camera scanner if ?scan=1 is in URL
+  useEffect(() => {
+    if (searchParams.get('scan') === '1' || searchParams.get('scan') === 'true') {
+      setIsScannerOpen(true);
+    }
+  }, [searchParams]);
 
   // Customer Selection & Search State (F4)
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -672,31 +685,40 @@ export default function POSPage() {
 
   return (
     <div className="h-[calc(100dvh-150px)] md:h-[calc(100vh-100px)] flex flex-col md:flex-row gap-4 md:gap-5 select-none">
-      {/* Mobile View Switcher (Catalog vs Cart) */}
+      {/* Mobile View Switcher (Catalog vs Cart vs Camera Scan) */}
       <div className="md:hidden flex items-center p-1 bg-stone-900 border border-stone-800 rounded-xl shrink-0 gap-1">
         <button
           type="button"
           onClick={() => setMobileTab('catalog')}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
             mobileTab === 'catalog'
               ? 'bg-amber-500 text-stone-950 font-bold shadow'
               : 'text-stone-400 hover:text-stone-200'
           }`}
         >
           <Package className="w-3.5 h-3.5" />
-          <span>Catalog ({searchResults.length})</span>
+          <span>Catalog</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsScannerOpen(true)}
+          className="py-2 px-3 rounded-lg text-xs font-bold bg-amber-500/20 hover:bg-amber-500 text-amber-400 hover:text-stone-950 flex items-center justify-center gap-1.5 transition-all border border-amber-500/40 shrink-0 cursor-pointer active:scale-95 shadow-sm"
+          title="Scan barcode with mobile camera"
+        >
+          <Camera className="w-3.5 h-3.5" />
+          <span>Scan</span>
         </button>
         <button
           type="button"
           onClick={() => setMobileTab('cart')}
-          className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+          className={`flex-1 py-2 px-2.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
             mobileTab === 'cart'
               ? 'bg-amber-500 text-stone-950 font-bold shadow'
               : 'text-stone-400 hover:text-stone-200'
           }`}
         >
           <ShoppingCart className="w-3.5 h-3.5" />
-          <span>Cart ({cart.reduce((s, it) => s + it.quantity, 0)})</span>
+          <span>Quote ({cart.reduce((s, it) => s + it.quantity, 0)})</span>
           {totals.grandTotal > 0 && (
             <span
               className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full ${
@@ -729,6 +751,17 @@ export default function POSPage() {
               className="w-full pl-10 pr-4 py-2.5 bg-stone-950 border border-stone-700/80 rounded-xl text-stone-100 text-sm focus:outline-none focus:border-amber-500 transition-colors font-sans"
             />
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsScannerOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold text-xs shadow-md shadow-amber-950/40 shrink-0 cursor-pointer active:scale-95 transition-all"
+            title="Scan barcode with phone camera"
+          >
+            <Camera className="w-4 h-4" />
+            <span className="hidden sm:inline">Camera Scan</span>
+            <span className="sm:hidden">Scan</span>
+          </button>
 
           <button
             onClick={() => {
@@ -1926,6 +1959,20 @@ export default function POSPage() {
         estimate={createdEstimate}
         businessProfile={businessProfile}
         onConvertToBill={handleConvertEstimateToBill}
+      />
+
+      {/* Live Camera Barcode Scanner for Mobile & Showroom Walkarounds */}
+      <BarcodeScannerModal
+        isOpen={isScannerOpen}
+        onClose={() => setIsScannerOpen(false)}
+        onProductScanned={(product) => {
+          addToCart(product, 1);
+        }}
+        cartCount={cart.reduce((s, it) => s + it.quantity, 0)}
+        cartTotal={totals.grandTotal}
+        onReviewCart={() => {
+          setMobileTab('cart');
+        }}
       />
     </div>
   );

@@ -16,6 +16,7 @@ import {
   ExternalLink,
   FileSpreadsheet,
   FileDown,
+  Camera,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { usePOS } from '../context/POSContext';
@@ -182,13 +183,24 @@ export default function EstimatesPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => navigate('/pos')}
-          className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold text-xs tracking-wide shadow-lg shadow-amber-950/40 flex items-center gap-2 transition-all cursor-pointer self-start md:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create New Estimate (POS Desk)</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          <button
+            onClick={() => navigate('/pos?scan=1')}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold text-xs tracking-wide shadow-lg shadow-amber-950/40 flex items-center gap-2 transition-all cursor-pointer active:scale-95"
+            title="Open phone camera to scan barcodes and build estimate"
+          >
+            <Camera className="w-4 h-4" />
+            <span>Scan Barcodes (Mobile)</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/pos')}
+            className="px-3.5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 hover:border-amber-500/40 font-semibold text-xs tracking-wide flex items-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>POS Desk</span>
+          </button>
+        </div>
       </div>
 
       {actionMessage && (

@@ -19,6 +19,8 @@ database/*.db
 database/*.db-journal
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite.enc
 server/database/backups/*
