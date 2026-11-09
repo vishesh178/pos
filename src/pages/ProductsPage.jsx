@@ -46,7 +46,6 @@ export default function ProductsPage() {
 
   // Direct Photo Capture State
   const [uploadingProductId, setUploadingProductId] = useState(null);
-  const [generatingAiId, setGeneratingAiId] = useState(null);
 
   // Modals & Selection state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -262,44 +261,6 @@ export default function ProductsPage() {
       alert('Photo snap error: ' + err.message);
     } finally {
       setUploadingProductId(null);
-    }
-  };
-
-  const handleGenerateAiMockup = async (productId) => {
-    setGeneratingAiId(productId);
-    try {
-      const res = await fetch('/api/ai/generate-mockup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ productId }),
-      });
-      
-      const resText = await res.text();
-      let resData = {};
-      try {
-        resData = JSON.parse(resText);
-      } catch (_) {
-        if (!res.ok) {
-          throw new Error(`Server returned status ${res.status}. Please make sure the server has been restarted (pm2 restart all).`);
-        }
-        throw new Error('Invalid response from server.');
-      }
-
-      if (!res.ok) {
-        throw new Error(resData.error || `Server error (${res.status})`);
-      }
-
-      setProducts((prev) =>
-        prev.map((p) => (p.id === productId ? { ...p, imageUrl: resData.imageUrl } : p))
-      );
-      alert('✨ AI Mockup generated successfully!');
-    } catch (err) {
-      alert('AI Mockup: ' + err.message);
-    } finally {
-      setGeneratingAiId(null);
     }
   };
 
@@ -553,9 +514,9 @@ export default function ProductsPage() {
                 {/* Action Buttons Row */}
                 <div className="flex items-center gap-2 pt-1 border-t border-stone-800/80">
                   {/* Direct Camera Photo Snap Button */}
-                  <label className="py-1.5 px-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+                  <label className="flex-1 py-1.5 px-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-400 font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
                     <Camera className="w-3.5 h-3.5" />
-                    <span>{isUploadingThis ? 'Saving...' : p.imageUrl ? 'Photo' : 'Snap'}</span>
+                    <span>{isUploadingThis ? 'Saving...' : p.imageUrl ? 'Change Photo' : 'Snap Photo'}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -565,18 +526,6 @@ export default function ProductsPage() {
                       onChange={(e) => handleDirectPhotoSnap(p.id, e.target.files?.[0])}
                     />
                   </label>
-
-                  {/* AI Mockup Button */}
-                  <button
-                    type="button"
-                    disabled={generatingAiId === p.id}
-                    onClick={() => handleGenerateAiMockup(p.id)}
-                    className="py-1.5 px-2.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/60 border border-purple-500/40 text-purple-300 font-bold text-xs flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                    title="Generate luxury showroom mockup photo using Gemini AI"
-                  >
-                    <Sparkles className={`w-3.5 h-3.5 ${generatingAiId === p.id ? 'animate-spin' : ''}`} />
-                    <span>{generatingAiId === p.id ? 'Making...' : 'AI Mockup'}</span>
-                  </button>
 
                   <button
                     type="button"
@@ -760,14 +709,6 @@ export default function ProductsPage() {
                       </td>
                       <td className="px-5 py-3.5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            disabled={generatingAiId === p.id}
-                            onClick={() => handleGenerateAiMockup(p.id)}
-                            title="Generate luxury showroom mockup photo with Gemini AI"
-                            className="p-1.5 rounded-lg bg-purple-950 text-purple-300 hover:text-purple-200 hover:bg-purple-900 border border-purple-500/30 transition-colors cursor-pointer"
-                          >
-                            <Sparkles className={`w-3.5 h-3.5 ${generatingAiId === p.id ? 'animate-spin' : ''}`} />
-                          </button>
                           <label
                             className="p-1.5 rounded-lg bg-stone-800 text-stone-300 hover:text-amber-400 hover:bg-stone-700 transition-colors cursor-pointer"
                             title="Snap / Update Photo"

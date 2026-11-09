@@ -18,7 +18,6 @@ const estimatesRoutes = require('./src/routes/estimates.routes');
 const pricebooksRoutes = require('./src/routes/pricebooks.routes');
 const exportRoutes = require('./src/routes/export.routes');
 const generalAccountsRoutes = require('./src/routes/generalAccounts.routes');
-const aiRoutes = require('./src/routes/ai.routes');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -92,7 +91,6 @@ app.use('/api/estimates', estimatesRoutes);
 app.use('/api/pricebooks', pricebooksRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/general-accounts', generalAccountsRoutes);
-app.use('/api/ai', aiRoutes);
 
 // Serve static client build with optimized HTTP cache controls
 const distPath = path.resolve(__dirname, '../dist');
