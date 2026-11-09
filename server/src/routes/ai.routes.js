@@ -75,11 +75,6 @@ function buildMockupPrompt(product) {
  * Generate a luxury mockup for a single product using Gemini API
  */
 router.post('/generate-mockup', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
-  const apiKey = process.env.GEMINI_API_KEY || '';
-  if (!apiKey) {
-    return res.status(400).json({ error: 'Gemini API key is not configured.' });
-  }
-
   const { productId, customPrompt } = req.body;
   if (!productId) {
     return res.status(400).json({ error: 'productId is required.' });
@@ -97,72 +92,66 @@ router.post('/generate-mockup', authenticateToken, requireRole(['ADMIN', 'MANAGE
 
     const promptText = customPrompt || buildMockupPrompt(product);
 
-    // List of Gemini Image generation models to try in order of preference
-    const candidateModels = [
-      'gemini-3.1-flash-image',
-      'gemini-2.5-flash-image',
-      'gemini-3-pro-image'
-    ];
-
     let imageBuffer = null;
     let mimeType = 'image/jpeg';
     let lastError = null;
 
-    for (const model of candidateModels) {
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: promptText }] }]
-          })
-        });
-
-        const data = await response.json();
-
-        if (data.candidates && data.candidates[0]?.content?.parts) {
-          for (const part of data.candidates[0].content.parts) {
-            if (part.inlineData && part.inlineData.data) {
-              imageBuffer = Buffer.from(part.inlineData.data, 'base64');
-              mimeType = part.inlineData.mimeType || 'image/jpeg';
-              break;
-            }
-          }
-        }
-
-        if (imageBuffer) break;
-
-        if (data.error) {
-          lastError = data.error.message;
-          // If rate limit / billing error, record it
-          if (data.error.code === 429) {
-            lastError = 'Google AI Studio rate limit or billing required for image generation. Please enable Pay-As-You-Go in Google AI Studio (aistudio.google.com).';
-          }
-        }
-      } catch (callErr) {
-        lastError = callErr.message;
-      }
-    }
-
-    // 2. If Gemini does not return an image (e.g. free quota 0), seamlessly fallback to Flux AI (Pollinations - 100% free)
-    if (!imageBuffer) {
-      try {
-        const encodedPrompt = encodeURIComponent(promptText);
-        const pollUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&model=flux&nologo=true`;
-        const pollRes = await fetch(pollUrl);
-        if (pollRes.ok) {
-          const arrayBuf = await pollRes.arrayBuffer();
+    // 1. Try Free Flux AI (Pollinations) - Fast, 100% free, high-end interior lighting
+    try {
+      const encodedPrompt = encodeURIComponent(promptText);
+      const pollUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&model=flux&nologo=true`;
+      const pollRes = await fetch(pollUrl);
+      if (pollRes.ok) {
+        const arrayBuf = await pollRes.arrayBuffer();
+        if (arrayBuf && arrayBuf.byteLength > 1000) {
           imageBuffer = Buffer.from(arrayBuf);
           mimeType = 'image/jpeg';
         }
-      } catch (pollErr) {
-        console.error('Flux free fallback error:', pollErr);
+      }
+    } catch (pollErr) {
+      console.warn('Flux engine note:', pollErr.message);
+    }
+
+    // 2. Fallback to Gemini if Flux did not return an image
+    const apiKey = process.env.GEMINI_API_KEY || '';
+    if (!imageBuffer && apiKey) {
+      const candidateModels = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image'];
+      for (const model of candidateModels) {
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: promptText }] }]
+            })
+          });
+
+          const data = await response.json();
+
+          if (data.candidates && data.candidates[0]?.content?.parts) {
+            for (const part of data.candidates[0].content.parts) {
+              if (part.inlineData && part.inlineData.data) {
+                imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+                mimeType = part.inlineData.mimeType || 'image/jpeg';
+                break;
+              }
+            }
+          }
+
+          if (imageBuffer) break;
+
+          if (data.error) {
+            lastError = data.error.message;
+          }
+        } catch (callErr) {
+          lastError = callErr.message;
+        }
       }
     }
 
     if (!imageBuffer) {
       return res.status(400).json({
-        error: lastError || 'Failed to generate image. Please check your internet connection or API settings.',
+        error: lastError || 'Failed to generate image. Please check your internet connection.',
         promptUsed: promptText
       });
     }
