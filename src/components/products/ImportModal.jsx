@@ -15,6 +15,93 @@ import {
 import * as XLSX from 'xlsx';
 import { useAuth } from '../../context/AuthContext';
 
+const DEPT_2_LETTER_MAP = {
+  'SHOWPIC': 'SP', 'SHOWPIECE': 'SP', 'SHOWPIECES': 'SP', 'SCULPTURE': 'SP', 'STATUE': 'SP', 'IDOL': 'SP',
+  'WALL CLOCK': 'WC', 'WALL CLOCKS': 'WC', 'CLOCK': 'WC',
+  'WALL PIC': 'WP', 'WALL PICTURE': 'WP', 'WALL ART': 'WP', 'CANVAS': 'WP', 'PAINTING': 'WP', 'FRAME': 'WP',
+  'FLOWER POT': 'FP', 'POT': 'FP', 'PLANTER': 'FP', 'VASE': 'FP',
+  'FLOWER': 'FL', 'GRASS': 'FL', 'BONSAI': 'FL',
+  'PLANT': 'PL', 'BAMBOO': 'PL', 'TREE': 'PL',
+  'STONE': 'ST', 'PEBBLE': 'ST', 'CHIP': 'ST',
+  'PHOTOFRAME': 'PF', 'PHOTO FRAME': 'PF',
+  'NIGHTLAMP': 'NL', 'NIGHT LAMP': 'NL', 'LAMP': 'NL',
+  'SWIMMING': 'SW', 'SWIM': 'SW',
+  'RACKET': 'RC',
+  'SCOOTER': 'SC',
+  'SKETCHING': 'SK',
+  'SCKETING': 'SK', 'SKATING': 'SK',
+  'CRYSTAL FISH': 'CF',
+  'THORMOS': 'TH', 'THERMOS': 'TH',
+  'METAL STAND': 'MS',
+  'SERVICES': 'SR', 'FITTING': 'SR', 'TRANSPORT': 'SR',
+  'PACKING': 'PK', 'BOX': 'PK', 'TAPE': 'PK'
+};
+
+function generateSmartSku(productName = '', categoryName = '', fallbackId = '') {
+  const name = String(productName || '').trim();
+  const cat = String(categoryName || '').trim().toUpperCase();
+
+  let dept = 'GN';
+  for (const [k, v] of Object.entries(DEPT_2_LETTER_MAP)) {
+    if (cat.includes(k) || name.toUpperCase().startsWith(k)) {
+      dept = v;
+      break;
+    }
+  }
+  if (dept === 'GN') {
+    if (/^SHP\b/i.test(name)) dept = 'SP';
+    else if (/^WC\b/i.test(name)) dept = 'WC';
+    else if (/^WP\b/i.test(name)) dept = 'WP';
+    else if (/^FP\b/i.test(name)) dept = 'FP';
+    else if (/^FL\b/i.test(name)) dept = 'FL';
+    else if (/^PL\b/i.test(name)) dept = 'PL';
+    else if (/^PF\b/i.test(name)) dept = 'PF';
+    else if (/^NL\b/i.test(name)) dept = 'NL';
+    else if (/^SW\b/i.test(name)) dept = 'SW';
+    else if (/^RC\b/i.test(name)) dept = 'RC';
+    else if (/^SC\b/i.test(name)) dept = 'SC';
+  }
+
+  const tierMatch = name.match(/\bA(\d{2,5})\b/i);
+  const tier = tierMatch ? 'A' + tierMatch[1] : '';
+
+  let code = '';
+  const bkMatch = name.match(/BK\s*-\s*([A-Za-z0-9\-]+)/i);
+  const compoundBk = name.match(/\b(BK[A-Za-z]{1,4}-\d+[A-Za-z]?)\b/i) || 
+                     name.match(/\b(BK\d+[A-Za-z]?)\b/i) || 
+                     name.match(/\b(BKSP\d+[A-Za-z]?)\b/i);
+
+  if (bkMatch) {
+    code = 'BK' + bkMatch[1].replace(/[^A-Za-z0-9]/g, '');
+  } else if (compoundBk) {
+    code = compoundBk[1].replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  } else {
+    let cleanName = name;
+    if (tier) {
+      cleanName = cleanName.replace(new RegExp('\\b' + tier + '\\b', 'i'), ' ');
+    }
+    cleanName = cleanName.replace(new RegExp('^' + dept + '\\b', 'i'), ' ');
+
+    const modelMatch = cleanName.match(/\b([A-Za-z]{1,4}[- ]?\d+[A-Za-z]?)\b/) ||
+                       cleanName.match(/\b(\d{4,6})\b/) ||
+                       cleanName.match(/\b([A-Z]-\d+)\b/);
+    if (modelMatch) {
+      code = modelMatch[1].replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    } else {
+      const words = cleanName.replace(/[^A-Za-z0-9 ]/g, '').trim().split(/\s+/).filter(Boolean);
+      if (words.length >= 2) {
+        code = (words[0].substring(0, 3) + words[1].substring(0, 3)).toUpperCase();
+      } else if (words.length === 1 && words[0]) {
+        code = words[0].substring(0, 6).toUpperCase();
+      } else {
+        code = 'ITM' + (fallbackId || '001');
+      }
+    }
+  }
+
+  return tier ? `${dept}-${code}-${tier}` : `${dept}-${code}`;
+}
+
 export default function ImportModal({ isOpen, onClose, onImported }) {
   const { token, user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
@@ -239,7 +326,7 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         }
 
         // Match SKU/Item Code first so that 'item code' or 'code' assigns to SKU, not name
-        if (colSku === -1 && (h === 'item code' || h.includes('sku') || h.includes('ordinal') || (h.includes('code') && !h.includes('main')))) {
+        if (colSku === -1 && (h === 'item code' || h.includes('sku') || (h.includes('code') && !h.includes('main') && !h.includes('bar') && !h.includes('file')))) {
           colSku = idx;
         } else if (colName === -1 && (h.includes('product') || (h.includes('name') && !h.includes('file')) || h.includes('item') || h.includes('particular') || h.includes('title') || h.includes('desc') || h.includes('article') || h.includes('goods') || h.includes('品名') || h.includes('商品'))) {
           colName = idx;
@@ -293,12 +380,6 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
         const rawCost = colPurchase !== -1 ? String(row[colPurchase] || '').trim() : '';
         const rawStock = colStock !== -1 ? String(row[colStock] || '').trim() : '';
         const rawSku = colSku !== -1 ? String(row[colSku] || '').trim() : '';
-        if (!rawCost && !rawStock && !rawSku && nameVal.length < 25) {
-          // Category separator row (e.g. ",FLOWER,,,,,,")
-          continue;
-        }
-
-        const skuVal = rawSku || '';
         const barcodeVal = colBarcode !== -1 ? String(row[colBarcode] || '').replace(/['"\s]/g, '') : '';
         
         // Smart category resolution mapping to canonical showroom categories
@@ -370,6 +451,12 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
             else catVal = 'SHOWPIC';
           }
         }
+
+        // If rawSku is missing, or is purely numeric ordinal (e.g. 2360), auto-generate Smart SKU [Dept]-[BK-number/code]-[Tier]
+        const isPureNumeric = rawSku && /^\d+$/.test(rawSku);
+        const skuVal = (!rawSku || isPureNumeric)
+          ? generateSmartSku(nameVal, catVal, r)
+          : rawSku;
 
         const purVal = rawCost ? parseFloat(rawCost.replace(/[^0-9.-]+/g, '')) || 0 : 0;
         let sellVal = colSelling !== -1 ? parseFloat(String(row[colSelling]).replace(/[^0-9.-]+/g, '')) || 0 : 0;

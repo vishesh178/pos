@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { calculateEan13Checksum, generateEan13Barcode, isValidEan13, generateSku } = require('../src/utils/barcode');
+const { calculateEan13Checksum, generateEan13Barcode, isValidEan13, generateSku, generateSmartSku } = require('../src/utils/barcode');
 const prisma = require('../src/prisma');
 
 test('EAN-13 checksum algorithm produces valid GS1 check digit', () => {
@@ -28,6 +28,21 @@ test('SKU generator produces formatted category code', () => {
 
   const skuFrame = generateSku('Metal Wall Art', 7);
   assert.equal(skuFrame, `CA-MF-${year}-0007`);
+});
+
+test('Smart SKU generator produces [Dept]-[Code]-[Tier] for BK and non-BK items', () => {
+  // BK items with tier
+  assert.equal(generateSmartSku('SHOWPIC A1680 BK-2088', 'SHOWPIC'), 'SP-BK2088-A1680');
+  assert.equal(generateSmartSku('WALL CLOCK BK-64 A2350', 'WALL CLOCK'), 'WC-BK64-A2350');
+  
+  // Model-coded non-BK with tier
+  assert.equal(generateSmartSku('FP A450 FP-60', 'FLOWER POT'), 'FP-FP60-A450');
+
+  // Compound BK item
+  assert.equal(generateSmartSku('FLOWER BKFL-108 A210', 'FLOWER'), 'FL-BKFL108-A210');
+
+  // Item with no tier
+  assert.equal(generateSmartSku('WALL CLOCK BK-64', 'WALL CLOCK'), 'WC-BK64');
 });
 
 test('Products exist in database with positive stock and valid pricing', async () => {

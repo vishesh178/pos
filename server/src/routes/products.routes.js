@@ -3,7 +3,7 @@ const path = require('path');
 const express = require('express');
 const prisma = require('../prisma');
 const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
-const { generateSku, generateEan13Barcode, isValidEan13 } = require('../utils/barcode');
+const { generateSku, generateSmartSku, generateEan13Barcode, isValidEan13 } = require('../utils/barcode');
 
 const router = express.Router();
 
@@ -71,9 +71,11 @@ router.post('/categories', authenticateToken, requireRole(['ADMIN', 'MANAGER']),
 // GET /api/products/generate-sku - Next SKU helper
 router.get('/generate-sku', async (req, res) => {
   try {
-    const { categoryName } = req.query;
+    const { categoryName, name } = req.query;
     const count = await prisma.product.count();
-    const sku = generateSku(categoryName || 'General', count + 1);
+    const sku = name && name.trim()
+      ? generateSmartSku(name, categoryName || 'General', count + 1)
+      : generateSku(categoryName || 'General', count + 1);
     res.json({ sku });
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate SKU.' });
@@ -567,8 +569,10 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
           continue;
         }
 
-        // Auto-assign SKU/Barcode if missing
-        const sku = row.sku && row.sku.trim() ? row.sku.trim() : generateSku(row.category || 'General', (Date.now() % 90000) + i);
+        // Auto-assign SKU/Barcode if missing: uses Smart SKU [Dept]-[BK-number/code]-[Tier]
+        const sku = row.sku && row.sku.trim()
+          ? row.sku.trim()
+          : generateSmartSku(row.name, row.category || 'General', i + 1);
         
         let barcode = row.barcode && String(row.barcode).trim() ? String(row.barcode).trim() : null;
         if (!barcode) {
