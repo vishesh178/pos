@@ -122,8 +122,381 @@ export default function EstimateModal({
     email: 'contact@curatedart.in',
   };
 
+  const generateCleanEstimateHtml = (targetLayout = layout) => {
+    const isThermal = targetLayout === 'thermal';
+    if (isThermal) {
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Estimate_${currentEstimate.estimateNumber || 'QUOTATION'}</title>
+  <style>
+    @page { size: 80mm auto; margin: 3mm; }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body {
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 1.3;
+      margin: 0;
+      padding: 4px;
+      background: #fff;
+      color: #000;
+    }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .bold { font-weight: bold; }
+    .divider { border-top: 1px dashed #000; margin: 6px 0; }
+    .row { display: flex; justify-content: space-between; }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    th { border-bottom: 1px solid #000; text-align: left; padding: 2px 0; }
+    td { padding: 3px 0; vertical-align: top; }
+  </style>
+</head>
+<body>
+  <div class="text-center">
+    <div class="bold" style="font-size: 14px; letter-spacing: 1px;">${business.businessName.toUpperCase()}</div>
+    <div style="font-size: 9px; color: #555;">${business.legalName || ''}</div>
+    <div style="font-size: 9px;">${business.address || ''}</div>
+    <div style="font-size: 9px;">Ph: ${business.phone || ''}</div>
+    <div style="font-size: 9px; font-weight: bold; margin-top: 2px;">GSTIN: ${business.gstin || ''}</div>
+    <div style="margin: 6px 0; padding: 2px; border: 1px solid #000; font-weight: bold; font-size: 10px;">
+      *** ESTIMATE / QUOTATION ***
+    </div>
+  </div>
+
+  <div style="font-size: 10px; line-height: 1.4;">
+    <div class="row"><span>Doc #:</span><span class="bold">${currentEstimate.estimateNumber}</span></div>
+    <div class="row"><span>Date:</span><span>${dateFormatted}</span></div>
+    <div class="row"><span>Valid Until:</span><span>${validUntilFormatted}</span></div>
+    <div class="row"><span>Customer:</span><span class="bold">${currentEstimate.customerName || 'Walk-in Retail Customer'}</span></div>
+    ${currentEstimate.customerMobile ? `<div class="row"><span>Mobile:</span><span>${currentEstimate.customerMobile}</span></div>` : ''}
+    ${currentEstimate.customerGstin ? `<div class="row"><span>GSTIN:</span><span>${currentEstimate.customerGstin}</span></div>` : ''}
+  </div>
+
+  <div class="divider"></div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 50%;">Item</th>
+        <th style="width: 25%; text-align: center;">Qty x Rate</th>
+        <th style="width: 25%; text-align: right;">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${(currentEstimate.items || []).map((it) => `
+        <tr>
+          <td>
+            <div class="bold">${it.productName}</div>
+            <div style="font-size: 8px; color: #555;">${it.sku} &bull; GST ${it.taxRate}%</div>
+          </td>
+          <td style="text-align: center;">${it.quantity % 1 === 0 ? it.quantity : Number(it.quantity.toFixed(3))} x ₹${it.unitPrice.toFixed(2)}</td>
+          <td style="text-align: right; font-weight: bold;">₹${it.totalAmount.toFixed(2)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="divider"></div>
+
+  <div style="font-size: 10px; line-height: 1.5;">
+    <div class="row"><span>SUBTOTAL:</span><span>₹${currentEstimate.subtotal.toFixed(2)}</span></div>
+    ${currentEstimate.discountTotal > 0 ? `<div class="row" style="color: #444;"><span>Discount:</span><span>-₹${currentEstimate.discountTotal.toFixed(2)}</span></div>` : ''}
+    ${currentEstimate.taxTotal > 0 ? `
+      ${!currentEstimate.isInterState ? `
+        <div class="row"><span>CGST:</span><span>₹${currentEstimate.cgstTotal.toFixed(2)}</span></div>
+        <div class="row"><span>SGST:</span><span>₹${currentEstimate.sgstTotal.toFixed(2)}</span></div>
+      ` : `
+        <div class="row"><span>IGST:</span><span>₹${currentEstimate.igstTotal.toFixed(2)}</span></div>
+      `}
+    ` : ''}
+    <div class="row bold" style="font-size: 12px; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px;">
+      <span>FINAL PAYABLE:</span><span>₹${currentEstimate.grandTotal.toFixed(2)}</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+  <div class="text-center" style="font-size: 9px; color: #555;">
+    <div>Prices valid for ${currentEstimate.validityDays || 15} days from quote date.</div>
+    <div>Not a Tax Invoice &bull; For Quotation Only</div>
+  </div>
+</body>
+</html>`;
+    }
+
+    // A4 Portrait Quotation Layout
+    const itemsHtml = (currentEstimate.items || []).map((it, idx) => {
+      const imgSrc = it.product?.imageUrl || it.imageUrl;
+      const imgTag = imgSrc
+        ? `<img src="${imgSrc}" alt="${it.productName}" style="width: 48px; height: 48px; object-fit: contain; border-radius: 4px; border: 1px solid #e5e7eb; display: block; margin: 0 auto; background: #ffffff;" onerror="this.style.display='none';" />`
+        : `<div style="width: 48px; height: 48px; border: 1px dashed #d1d5db; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #9ca3af; margin: 0 auto; text-align: center;">No Photo</div>`;
+
+      return `
+        <tr style="page-break-inside: avoid; break-inside: avoid;">
+          <td style="border: 1px solid #000000; padding: 6px 4px; text-align: center; font-weight: bold; vertical-align: middle;">${idx + 1}</td>
+          <td style="border: 1px solid #000000; padding: 6px 8px; vertical-align: middle;">
+            <div style="font-weight: bold; font-size: 11px; line-height: 1.3; color: #000000;">${it.productName}</div>
+            <div style="font-size: 9px; color: #555555; font-family: monospace; margin-top: 2px;">Code: ${it.sku || it.product?.sku || 'N/A'}</div>
+          </td>
+          <td style="border: 1px solid #000000; padding: 4px; text-align: center; vertical-align: middle;">
+            ${imgTag}
+          </td>
+          <td style="border: 1px solid #000000; padding: 6px 4px; text-align: center; font-weight: bold; font-size: 11px; vertical-align: middle;">
+            ${it.quantity % 1 === 0 ? it.quantity : Number(it.quantity.toFixed(3))}
+          </td>
+          <td style="border: 1px solid #000000; padding: 6px 6px; text-align: center; font-weight: bold; font-size: 11px; vertical-align: middle;">
+            ₹${(it.mrp || it.unitPrice).toLocaleString('en-IN')}
+          </td>
+          <td style="border: 1px solid #000000; padding: 6px 6px; text-align: center; font-size: 11px; color: #374151; vertical-align: middle; font-family: monospace;">
+            ${it.discountAmount > 0 ? `₹${it.discountAmount.toLocaleString('en-IN')}` : '-'}
+          </td>
+          <td style="border: 1px solid #000000; padding: 6px 8px; text-align: right; font-weight: bold; font-size: 11px; vertical-align: middle;">
+            ₹${it.totalAmount.toLocaleString('en-IN')}
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Estimate_${currentEstimate.estimateNumber || 'QUOTATION'}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 8mm 8mm 8mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      background: #ffffff;
+      color: #000000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 10px;
+    }
+    .customer-box {
+      width: 100%;
+      border: 1px solid #000000;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      border-radius: 2px;
+    }
+    .items-table {
+      width: 100%;
+      table-layout: fixed;
+      border-collapse: collapse;
+      border: 1px solid #000000;
+    }
+    .items-table th {
+      border: 1px solid #000000;
+      background-color: #f3f4f6 !important;
+      padding: 8px 4px;
+      font-size: 11px;
+      font-weight: bold;
+      color: #000000;
+      text-align: center;
+    }
+    .items-table td {
+      border: 1px solid #000000;
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+    }
+    .summary-td-label {
+      border: 1px solid #000000;
+      padding: 6px 12px;
+      text-align: right;
+      font-weight: bold;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.3px;
+    }
+    .summary-td-val {
+      border: 1px solid #000000;
+      padding: 6px 8px;
+      text-align: right;
+      font-weight: bold;
+      font-size: 11px;
+    }
+    .terms-section {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Header Table -->
+  <table class="header-table">
+    <tr>
+      <td style="vertical-align: top;">
+        <h1 style="margin: 0; font-size: 22px; font-weight: 900; letter-spacing: -0.5px; text-transform: uppercase;">
+          ${business.businessName.toUpperCase()}
+        </h1>
+        <p style="margin: 4px 0 0 0; font-size: 10px; color: #4b5563;">
+          Tel: ${business.phone || ''} &bull; GSTIN: ${business.gstin || ''}
+        </p>
+        <p style="margin: 2px 0 0 0; font-size: 10px; color: #4b5563;">
+          ${business.address || ''}
+        </p>
+      </td>
+      <td style="vertical-align: top; text-align: right; width: 220px;">
+        <div style="display: inline-block; background: #000000; color: #ffffff; padding: 4px 10px; font-weight: bold; font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase;">
+          ESTIMATE / QUOTATION
+        </div>
+        <div style="margin-top: 6px; font-size: 11px; line-height: 1.4;">
+          <div><strong>Doc #:</strong> <span style="font-family: monospace; font-weight: bold;">${currentEstimate.estimateNumber}</span></div>
+          <div style="color: #4b5563;">Date: ${dateFormatted}</div>
+          <div style="color: #4b5563;">Valid Until: ${validUntilFormatted}</div>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <div style="width: 100%; height: 2px; background: #000000; margin-bottom: 10px;"></div>
+
+  <!-- Customer Box -->
+  <div class="customer-box">
+    <div style="font-size: 9px; font-weight: bold; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+      CUSTOMER NAME:
+    </div>
+    <div style="font-size: 13px; font-weight: bold; color: #000000; margin-top: 2px;">
+      ${currentEstimate.customerName || 'Walk-in Retail Customer'}
+    </div>
+    ${(currentEstimate.customerMobile || currentEstimate.customerGstin) ? `
+      <div style="font-size: 10px; color: #4b5563; margin-top: 2px;">
+        ${currentEstimate.customerMobile ? `Phone: ${currentEstimate.customerMobile}` : ''}
+        ${currentEstimate.customerMobile && currentEstimate.customerGstin ? ' &bull; ' : ''}
+        ${currentEstimate.customerGstin ? `GSTIN: ${currentEstimate.customerGstin}` : ''}
+      </div>
+    ` : ''}
+  </div>
+
+  <!-- Items Table (Guaranteed 100% width with fixed percentages) -->
+  <table class="items-table">
+    <colgroup>
+      <col style="width: 5%;" />
+      <col style="width: 32%;" />
+      <col style="width: 14%;" />
+      <col style="width: 8%;" />
+      <col style="width: 13%;" />
+      <col style="width: 12%;" />
+      <col style="width: 16%;" />
+    </colgroup>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th style="text-align: left; padding-left: 8px;">Item Description</th>
+        <th>Product Photo</th>
+        <th>Qty</th>
+        <th>Rate (MRP)</th>
+        <th>Discount</th>
+        <th style="text-align: right; padding-right: 8px;">Total (₹)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${itemsHtml}
+
+      <!-- Subtotal -->
+      <tr style="border-top: 2px solid #000000;">
+        <td colspan="6" class="summary-td-label">BILLING AMOUNT (SUBTOTAL)</td>
+        <td class="summary-td-val">₹${currentEstimate.subtotal.toLocaleString('en-IN')}</td>
+      </tr>
+
+      <!-- Total Discount Applied -->
+      ${currentEstimate.discountTotal > 0 ? `
+        <tr>
+          <td colspan="6" class="summary-td-label" style="font-size: 10px; color: #065f46;">TOTAL DISCOUNT APPLIED</td>
+          <td class="summary-td-val" style="color: #065f46;">-₹${currentEstimate.discountTotal.toLocaleString('en-IN')}</td>
+        </tr>
+      ` : ''}
+
+      <!-- Taxes -->
+      ${currentEstimate.taxTotal > 0 ? `
+        <tr>
+          <td colspan="6" class="summary-td-label" style="font-size: 10px; color: #4b5563;">
+            ${!currentEstimate.isInterState ? 'GST (CGST + SGST)' : 'IGST (Inter-State)'}
+          </td>
+          <td class="summary-td-val" style="color: #374151;">₹${currentEstimate.taxTotal.toLocaleString('en-IN')}</td>
+        </tr>
+      ` : ''}
+
+      <!-- Final Payable Amount -->
+      <tr style="border-top: 2px solid #000000; background-color: #f9fafb;">
+        <td colspan="6" class="summary-td-label" style="font-size: 12px; font-weight: 900; color: #000000;">
+          FINAL PAYABLE AMOUNT (GRAND TOTAL)
+        </td>
+        <td class="summary-td-val" style="font-size: 13px; font-weight: 900; color: #000000;">
+          ₹${currentEstimate.grandTotal.toLocaleString('en-IN')}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Terms & Signature -->
+  <div class="terms-section">
+    <div style="width: 58%; font-size: 10px; color: #4b5563; line-height: 1.4;">
+      <div style="font-weight: bold; color: #000000; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px;">
+        Notes &amp; Terms:
+      </div>
+      <div>1. This estimate is valid for ${currentEstimate.validityDays || 15} days from the date of issue.</div>
+      <div>2. Subject to product availability at the time of final confirmation.</div>
+      <div>3. Fragile luxury décor is quality-inspected prior to delivery.</div>
+    </div>
+    <div style="width: 38%; text-align: right;">
+      <div style="height: 38px;"></div>
+      <div style="width: 170px; margin-left: auto; border-bottom: 1px solid #000000; margin-bottom: 4px;"></div>
+      <div style="font-size: 11px; font-weight: bold; color: #000000;">Authorized Signatory</div>
+    </div>
+  </div>
+</body>
+</html>`;
+  };
+
+  const printIsolatedIframe = () => {
+    const cleanHtml = generateCleanEstimateHtml(layout);
+
+    let iframe = document.getElementById('estimate-print-isolated-iframe');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'estimate-print-isolated-iframe';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+    }
+
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(cleanHtml);
+    doc.close();
+
+    iframe.contentWindow.focus();
+    setTimeout(() => {
+      iframe.contentWindow.print();
+    }, 400);
+  };
+
   const handlePrint = () => {
-    window.print();
+    printIsolatedIframe();
   };
 
   const handleDownloadPDF = async () => {
@@ -138,8 +511,7 @@ export default function EstimateModal({
           alert('Could not save PDF: ' + (res?.error || 'Unknown error'));
         }
       } else {
-        // In browser, window.print triggers the native print/Save as PDF dialog
-        window.print();
+        printIsolatedIframe();
       }
     } catch (err) {
       console.error('PDF Download Error:', err);
@@ -280,12 +652,14 @@ export default function EstimateModal({
             visibility: visible !important;
           }
           #printable-estimate {
-            position: absolute !important;
+            position: fixed !important;
             left: 0 !important;
             top: 0 !important;
             width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
             margin: 0 !important;
-            padding: 16px !important;
+            padding: 8mm !important;
             background: #ffffff !important;
             color: #000000 !important;
             box-shadow: none !important;
@@ -508,7 +882,7 @@ export default function EstimateModal({
         )}
 
         {/* Printable View Container */}
-        <div className="p-6 bg-stone-950 max-h-[65vh] overflow-y-auto flex justify-center">
+        <div className="p-3 sm:p-6 bg-stone-950 max-h-[65vh] overflow-y-auto overflow-x-auto flex justify-center">
           {layout === 'thermal' ? (
             /* 80mm Slip Layout */
             <div
@@ -626,10 +1000,10 @@ export default function EstimateModal({
               </div>
             </div>
           ) : (
-            /* A4 Estimate Layout - Exactly Matching User's Image */
+            /* A4 Estimate Layout - Guaranteed Full Margin Width */
             <div
               id="printable-estimate"
-              className="w-[740px] bg-white text-black p-8 font-sans text-xs shadow-xl rounded-sm border border-neutral-300"
+              className="w-full max-w-[740px] min-w-[580px] bg-white text-black p-4 sm:p-8 font-sans text-xs shadow-xl rounded-sm border border-neutral-300"
             >
               {/* Header Section */}
               <div className="flex justify-between items-start">
@@ -679,16 +1053,25 @@ export default function EstimateModal({
               </div>
 
               {/* Items Grid Table */}
-              <table className="w-full text-left border-collapse border border-black my-2">
+              <table className="w-full table-fixed text-left border-collapse border border-black my-2">
+                <colgroup>
+                  <col style={{ width: '5%' }} />
+                  <col style={{ width: '32%' }} />
+                  <col style={{ width: '14%' }} />
+                  <col style={{ width: '8%' }} />
+                  <col style={{ width: '13%' }} />
+                  <col style={{ width: '12%' }} />
+                  <col style={{ width: '16%' }} />
+                </colgroup>
                 <thead>
                   <tr className="bg-neutral-100 text-black text-[11px] font-bold">
-                    <th className="border border-black py-2.5 px-2 text-center w-10">#</th>
-                    <th className="border border-black py-2.5 px-3">Item Description</th>
-                    <th className="border border-black py-2.5 px-2 text-center w-28">Product Photo</th>
-                    <th className="border border-black py-2.5 px-2 text-center w-12">Qty</th>
-                    <th className="border border-black py-2.5 px-3 text-center w-24">Rate (MRP)</th>
-                    <th className="border border-black py-2.5 px-3 text-center w-20">Discount</th>
-                    <th className="border border-black py-2.5 px-3 text-right w-24">Total (₹)</th>
+                    <th className="border border-black py-2.5 px-1 text-center">#</th>
+                    <th className="border border-black py-2.5 px-2">Item Description</th>
+                    <th className="border border-black py-2.5 px-1 text-center">Product Photo</th>
+                    <th className="border border-black py-2.5 px-1 text-center">Qty</th>
+                    <th className="border border-black py-2.5 px-2 text-center">Rate (MRP)</th>
+                    <th className="border border-black py-2.5 px-2 text-center">Discount</th>
+                    <th className="border border-black py-2.5 px-2 text-right">Total (₹)</th>
                   </tr>
                 </thead>
                 <tbody className="text-[11px]">
@@ -697,12 +1080,12 @@ export default function EstimateModal({
                     return (
                       <tr key={idx} className="hover:bg-neutral-50/50">
                         {/* 1. Index # */}
-                        <td className="border border-black py-3 px-2 text-center font-bold align-middle">
+                        <td className="border border-black py-3 px-1 text-center font-bold align-middle">
                           {idx + 1}
                         </td>
 
                         {/* 2. Item Description */}
-                        <td className="border border-black py-3 px-3 align-middle">
+                        <td className="border border-black py-3 px-2 align-middle break-words">
                           <p className="font-bold text-xs text-black leading-snug">
                             {it.productName}
                           </p>
@@ -712,8 +1095,8 @@ export default function EstimateModal({
                         </td>
 
                         {/* 3. Product Photo */}
-                        <td className="border border-black py-2 px-2 text-center align-middle">
-                          <div className="w-16 h-16 border border-neutral-300 rounded p-0.5 bg-white mx-auto flex items-center justify-center overflow-hidden">
+                        <td className="border border-black py-2 px-1 text-center align-middle">
+                          <div className="w-12 h-12 border border-neutral-300 rounded p-0.5 bg-white mx-auto flex items-center justify-center overflow-hidden">
                             {imgSrc ? (
                               <img
                                 src={imgSrc}
@@ -722,32 +1105,32 @@ export default function EstimateModal({
                               />
                             ) : (
                               <div className="flex flex-col items-center justify-center text-neutral-400">
-                                <Package className="w-5 h-5 stroke-1" />
-                                <span className="text-[8px] mt-0.5">No Photo</span>
+                                <Package className="w-4 h-4 stroke-1" />
+                                <span className="text-[7px] mt-0.5">No Photo</span>
                               </div>
                             )}
                           </div>
                         </td>
 
                         {/* 4. Qty */}
-                        <td className="border border-black py-3 px-2 text-center font-bold align-middle text-xs">
+                        <td className="border border-black py-3 px-1 text-center font-bold align-middle text-xs">
                           {it.quantity % 1 === 0 ? it.quantity : Number(it.quantity.toFixed(3))}
                         </td>
 
                         {/* 5. Rate (MRP) */}
-                        <td className="border border-black py-3 px-3 text-center align-middle font-bold text-xs font-sans">
+                        <td className="border border-black py-3 px-2 text-center align-middle font-bold text-xs font-sans">
                           ₹{(it.mrp || it.unitPrice).toLocaleString('en-IN')}
                         </td>
 
                         {/* 6. Discount */}
-                        <td className="border border-black py-3 px-3 text-center align-middle font-mono text-xs text-neutral-700">
+                        <td className="border border-black py-3 px-2 text-center align-middle font-mono text-xs text-neutral-700">
                           {it.discountAmount > 0
                             ? `₹${it.discountAmount.toLocaleString('en-IN')}`
                             : '-'}
                         </td>
 
                         {/* 7. Total (₹) */}
-                        <td className="border border-black py-3 px-3 text-right align-middle font-bold text-xs font-sans">
+                        <td className="border border-black py-3 px-2 text-right align-middle font-bold text-xs font-sans">
                           ₹{it.totalAmount.toLocaleString('en-IN')}
                         </td>
                       </tr>
@@ -758,11 +1141,11 @@ export default function EstimateModal({
                   <tr className="border-t-2 border-black">
                     <td
                       colSpan={6}
-                      className="border border-black py-2.5 px-4 text-right font-bold uppercase tracking-wider text-[11px] text-neutral-800"
+                      className="border border-black py-2.5 px-3 text-right font-bold uppercase tracking-wider text-[11px] text-neutral-800"
                     >
                       BILLING AMOUNT (SUBTOTAL)
                     </td>
-                    <td className="border border-black py-2.5 px-3 text-right font-bold text-xs font-sans">
+                    <td className="border border-black py-2.5 px-2 text-right font-bold text-xs font-sans">
                       ₹{currentEstimate.subtotal.toLocaleString('en-IN')}
                     </td>
                   </tr>
@@ -772,11 +1155,11 @@ export default function EstimateModal({
                     <tr>
                       <td
                         colSpan={6}
-                        className="border border-black py-1.5 px-4 text-right font-semibold text-[10px] text-neutral-600 uppercase"
+                        className="border border-black py-1.5 px-3 text-right font-semibold text-[10px] text-neutral-600 uppercase"
                       >
                         TOTAL DISCOUNT APPLIED
                       </td>
-                      <td className="border border-black py-1.5 px-3 text-right font-bold text-[11px] text-emerald-800">
+                      <td className="border border-black py-1.5 px-2 text-right font-bold text-[11px] text-emerald-800">
                         -₹{currentEstimate.discountTotal.toLocaleString('en-IN')}
                       </td>
                     </tr>
@@ -786,11 +1169,11 @@ export default function EstimateModal({
                     <tr>
                       <td
                         colSpan={6}
-                        className="border border-black py-1.5 px-4 text-right font-semibold text-[10px] text-neutral-600 uppercase"
+                        className="border border-black py-1.5 px-3 text-right font-semibold text-[10px] text-neutral-600 uppercase"
                       >
                         {!currentEstimate.isInterState ? 'GST (CGST + SGST)' : 'IGST (Inter-State)'}
                       </td>
-                      <td className="border border-black py-1.5 px-3 text-right font-bold text-[11px] text-neutral-700">
+                      <td className="border border-black py-1.5 px-2 text-right font-bold text-[11px] text-neutral-700">
                         ₹{currentEstimate.taxTotal.toLocaleString('en-IN')}
                       </td>
                     </tr>
@@ -800,11 +1183,11 @@ export default function EstimateModal({
                   <tr className="border-t-2 border-black bg-neutral-50/80">
                     <td
                       colSpan={6}
-                      className="border border-black py-3 px-4 text-right font-black uppercase tracking-wider text-xs text-black"
+                      className="border border-black py-3 px-3 text-right font-black uppercase tracking-wider text-xs text-black"
                     >
                       FINAL PAYABLE AMOUNT (GRAND TOTAL)
                     </td>
-                    <td className="border border-black py-3 px-3 text-right font-black text-sm text-black font-sans">
+                    <td className="border border-black py-3 px-2 text-right font-black text-sm text-black font-sans">
                       ₹{currentEstimate.grandTotal.toLocaleString('en-IN')}
                     </td>
                   </tr>

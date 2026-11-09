@@ -475,67 +475,158 @@ router.get('/:id/export/excel', authenticateToken, async (req, res) => {
 
     const XLSX = require('xlsx');
 
-    const wsData = [
-      [business.businessName.toUpperCase(), '', '', '', '', '', '', ''],
-      [`Tel: ${business.phone || ''} | GSTIN: ${business.gstin || ''}`, '', '', '', '', '', '', ''],
-      [`Address: ${business.address || ''}`, '', '', '', '', '', '', ''],
-      [],
-      ['ESTIMATE / QUOTATION', '', '', '', `Doc #: ${estimate.estimateNumber}`, '', `Date: ${new Date(estimate.createdAt).toLocaleDateString('en-IN')}`, ''],
-      [`Customer: ${estimate.customerName}`, '', '', '', `Valid For: ${estimate.validityDays || 15} Days`, '', `Status: ${estimate.status}`, ''],
-      [`Phone: ${estimate.customerMobile || 'N/A'}`, '', `GSTIN: ${estimate.customerGstin || 'N/A'}`, '', `Place of Supply: ${estimate.placeOfSupply || '24-Gujarat'}`, '', '', ''],
-      [],
-      ['#', 'Item Description', 'Item Code / SKU', 'Product Photo', 'Qty', 'Rate (MRP) (₹)', 'Discount (₹)', 'Total (₹)'],
-    ];
+    const wsData = [];
+    const merges = [];
+
+    // Row 0: Business Name
+    wsData.push([business.businessName.toUpperCase(), '', '', '', '', '', '', '']);
+    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } });
+
+    // Row 1: Tel & GSTIN
+    wsData.push([`Tel: ${business.phone || ''} | GSTIN: ${business.gstin || ''}`, '', '', '', '', '', '', '']);
+    merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: 7 } });
+
+    // Row 2: Address
+    wsData.push([`Address: ${business.address || ''}`, '', '', '', '', '', '', '']);
+    merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: 7 } });
+
+    // Row 3: Blank
+    wsData.push([]);
+
+    // Row 4: Title & Doc Info
+    wsData.push(['ESTIMATE / QUOTATION', '', '', '', `Doc #: ${estimate.estimateNumber}`, '', `Date: ${new Date(estimate.createdAt).toLocaleDateString('en-IN')}`, '']);
+    merges.push({ s: { r: 4, c: 0 }, e: { r: 4, c: 3 } });
+    merges.push({ s: { r: 4, c: 4 }, e: { r: 4, c: 5 } });
+    merges.push({ s: { r: 4, c: 6 }, e: { r: 4, c: 7 } });
+
+    // Row 5: Customer & Validity
+    wsData.push([`Customer: ${estimate.customerName}`, '', '', '', `Valid For: ${estimate.validityDays || 15} Days`, '', `Status: ${estimate.status}`, '']);
+    merges.push({ s: { r: 5, c: 0 }, e: { r: 5, c: 3 } });
+    merges.push({ s: { r: 5, c: 4 }, e: { r: 5, c: 5 } });
+    merges.push({ s: { r: 5, c: 6 }, e: { r: 5, c: 7 } });
+
+    // Row 6: Phone & GSTIN & Place of Supply
+    wsData.push([`Phone: ${estimate.customerMobile || 'N/A'}`, '', `GSTIN: ${estimate.customerGstin || 'N/A'}`, '', `Place of Supply: ${estimate.placeOfSupply || '24-Gujarat'}`, '', '', '']);
+    merges.push({ s: { r: 6, c: 0 }, e: { r: 6, c: 1 } });
+    merges.push({ s: { r: 6, c: 2 }, e: { r: 6, c: 3 } });
+    merges.push({ s: { r: 6, c: 4 }, e: { r: 6, c: 7 } });
+
+    // Row 7: Blank
+    wsData.push([]);
+
+    // Row 8: Table Header
+    wsData.push(['#', 'Item Description', 'Item Code / SKU', 'Product Photo', 'Qty', 'Rate (MRP) (₹)', 'Discount (₹)', 'Total (₹)']);
+
+    const host = req.get('host') || 'localhost:5001';
+    const protocol = req.protocol || 'http';
+    const baseUrl = `${protocol}://${host}`;
 
     (estimate.items || []).forEach((it, idx) => {
-      const photoInfo = it.product?.imageUrl || it.imageUrl || '-';
+      let photoUrl = it.product?.imageUrl || it.imageUrl || '';
+      if (photoUrl && photoUrl.startsWith('/')) {
+        photoUrl = `${baseUrl}${photoUrl}`;
+      } else if (!photoUrl) {
+        photoUrl = '-';
+      }
+
       wsData.push([
         idx + 1,
         it.productName,
         it.sku || it.product?.sku || 'CUSTOM',
-        photoInfo,
-        it.quantity,
-        it.mrp || it.unitPrice,
-        it.discountAmount || 0,
-        it.totalAmount,
+        photoUrl,
+        Number(it.quantity),
+        Number(it.mrp || it.unitPrice),
+        Number(it.discountAmount || 0),
+        Number(it.totalAmount),
       ]);
     });
 
+    // Blank row before totals
     wsData.push([]);
-    wsData.push(['', '', '', '', '', '', 'BILLING AMOUNT (SUBTOTAL):', estimate.subtotal]);
+
+    // Subtotal Row
+    const subtotalIdx = wsData.length;
+    wsData.push(['BILLING AMOUNT (SUBTOTAL):', '', '', '', '', '', '', Number(estimate.subtotal)]);
+    merges.push({ s: { r: subtotalIdx, c: 0 }, e: { r: subtotalIdx, c: 6 } });
+
     if (estimate.discountTotal > 0) {
-      wsData.push(['', '', '', '', '', '', 'TOTAL DISCOUNT:', -estimate.discountTotal]);
+      const discIdx = wsData.length;
+      wsData.push(['TOTAL DISCOUNT APPLIED:', '', '', '', '', '', '', -Number(estimate.discountTotal)]);
+      merges.push({ s: { r: discIdx, c: 0 }, e: { r: discIdx, c: 6 } });
     }
+
     if (estimate.cgstTotal > 0) {
-      wsData.push(['', '', '', '', '', '', 'CGST:', estimate.cgstTotal]);
-      wsData.push(['', '', '', '', '', '', 'SGST:', estimate.sgstTotal]);
+      const cgstIdx = wsData.length;
+      wsData.push(['CGST:', '', '', '', '', '', '', Number(estimate.cgstTotal)]);
+      merges.push({ s: { r: cgstIdx, c: 0 }, e: { r: cgstIdx, c: 6 } });
+
+      const sgstIdx = wsData.length;
+      wsData.push(['SGST:', '', '', '', '', '', '', Number(estimate.sgstTotal)]);
+      merges.push({ s: { r: sgstIdx, c: 0 }, e: { r: sgstIdx, c: 6 } });
     }
+
     if (estimate.igstTotal > 0) {
-      wsData.push(['', '', '', '', '', '', 'IGST (Inter-State):', estimate.igstTotal]);
+      const igstIdx = wsData.length;
+      wsData.push(['IGST (Inter-State):', '', '', '', '', '', '', Number(estimate.igstTotal)]);
+      merges.push({ s: { r: igstIdx, c: 0 }, e: { r: igstIdx, c: 6 } });
     }
+
     if (estimate.roundOff !== 0) {
-      wsData.push(['', '', '', '', '', '', 'Round Off:', estimate.roundOff]);
+      const roIdx = wsData.length;
+      wsData.push(['Round Off:', '', '', '', '', '', '', Number(estimate.roundOff)]);
+      merges.push({ s: { r: roIdx, c: 0 }, e: { r: roIdx, c: 6 } });
     }
-    wsData.push(['', '', '', '', '', '', 'FINAL PAYABLE AMOUNT (GRAND TOTAL):', estimate.grandTotal]);
+
+    // Final Grand Total Row
+    const grandIdx = wsData.length;
+    wsData.push(['FINAL PAYABLE AMOUNT (GRAND TOTAL):', '', '', '', '', '', '', Number(estimate.grandTotal)]);
+    merges.push({ s: { r: grandIdx, c: 0 }, e: { r: grandIdx, c: 6 } });
+
+    // Blank row
     wsData.push([]);
+
+    // Terms & Notes
+    const notesIdx = wsData.length;
     wsData.push(['Notes & Terms:']);
+    merges.push({ s: { r: notesIdx, c: 0 }, e: { r: notesIdx, c: 7 } });
+
+    const note1Idx = wsData.length;
     wsData.push([`1. This estimate is valid for ${estimate.validityDays || 15} days from the date of issue.`]);
+    merges.push({ s: { r: note1Idx, c: 0 }, e: { r: note1Idx, c: 7 } });
+
+    const note2Idx = wsData.length;
     wsData.push(['2. Subject to product availability at the time of final confirmation.']);
+    merges.push({ s: { r: note2Idx, c: 0 }, e: { r: note2Idx, c: 7 } });
+
+    const note3Idx = wsData.length;
     wsData.push(['3. Fragile luxury décor is quality-checked prior to dispatch.']);
+    merges.push({ s: { r: note3Idx, c: 0 }, e: { r: note3Idx, c: 7 } });
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
+    ws['!merges'] = merges;
     ws['!cols'] = [
-      { wch: 6 },
-      { wch: 32 },
-      { wch: 20 },
-      { wch: 25 },
-      { wch: 8 },
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 16 },
+      { wch: 6 },   // #
+      { wch: 38 },  // Item Description
+      { wch: 20 },  // Item Code / SKU
+      { wch: 32 },  // Product Photo Link
+      { wch: 8 },   // Qty
+      { wch: 16 },  // Rate (MRP) (₹)
+      { wch: 16 },  // Discount (₹)
+      { wch: 18 },  // Total (₹)
     ];
+
+    // Format currency and numeric cells
+    for (let r = 8; r < wsData.length; r++) {
+      ['E', 'F', 'G', 'H'].forEach((col) => {
+        const cellRef = `${col}${r + 1}`;
+        if (ws[cellRef] && typeof ws[cellRef].v === 'number') {
+          ws[cellRef].t = 'n';
+          ws[cellRef].z = col === 'E' ? '#,##0' : '#,##0.00';
+        }
+      });
+    }
 
     XLSX.utils.book_append_sheet(wb, ws, 'Estimate');
 
