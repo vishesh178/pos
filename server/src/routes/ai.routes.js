@@ -144,9 +144,25 @@ router.post('/generate-mockup', authenticateToken, requireRole(['ADMIN', 'MANAGE
       }
     }
 
+    // 2. If Gemini does not return an image (e.g. free quota 0), seamlessly fallback to Flux AI (Pollinations - 100% free)
+    if (!imageBuffer) {
+      try {
+        const encodedPrompt = encodeURIComponent(promptText);
+        const pollUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&model=flux&nologo=true`;
+        const pollRes = await fetch(pollUrl);
+        if (pollRes.ok) {
+          const arrayBuf = await pollRes.arrayBuffer();
+          imageBuffer = Buffer.from(arrayBuf);
+          mimeType = 'image/jpeg';
+        }
+      } catch (pollErr) {
+        console.error('Flux free fallback error:', pollErr);
+      }
+    }
+
     if (!imageBuffer) {
       return res.status(400).json({
-        error: lastError || 'Failed to generate image with Gemini API. Check your model quota in Google AI Studio.',
+        error: lastError || 'Failed to generate image. Please check your internet connection or API settings.',
         promptUsed: promptText
       });
     }
