@@ -155,12 +155,24 @@ function generateSku(categoryName = 'General', counter = 1) {
   return `CA-${prefix}-${year}-${seq}`;
 }
 
+const VALID_DEPTS = new Set([
+  'SP', 'WC', 'WP', 'FP', 'FL', 'PL', 'ST', 'PF', 'NL', 'SW', 'RC', 'SC', 'SK', 'CF', 'TH', 'MS', 'SR', 'PK', 'GN'
+]);
+
+function isSmartSku(sku) {
+  if (!sku || typeof sku !== 'string') return false;
+  const parts = sku.trim().split('-');
+  if (parts.length < 2) return false;
+  return VALID_DEPTS.has(parts[0].toUpperCase());
+}
+
 module.exports = {
   calculateEan13Checksum,
   generateEan13Barcode,
   isValidEan13,
   generateSku,
   generateSmartSku,
+  isSmartSku,
   DEPT_2_LETTER_MAP,
 };
 

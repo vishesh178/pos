@@ -1,5 +1,5 @@
 const prisma = require('../prisma');
-const { generateSmartSku } = require('../utils/barcode');
+const { generateSmartSku, isSmartSku } = require('../utils/barcode');
 
 async function upgradeAllSkus() {
   console.log('--- Starting SKU Upgrade to Smart [Dept]-[Code]-[Tier] ---');
@@ -15,16 +15,14 @@ async function upgradeAllSkus() {
 
   // Track existing smart SKUs
   for (const p of products) {
-    if (p.sku && !p.sku.startsWith('CA-')) {
+    if (isSmartSku(p.sku)) {
       usedSkus.add(p.sku);
     }
   }
 
   for (let i = 0; i < products.length; i++) {
     const p = products[i];
-    const isLegacy = p.sku.startsWith('CA-') || !p.sku.includes('-');
-    
-    if (isLegacy) {
+    if (!isSmartSku(p.sku)) {
       let newSku = generateSmartSku(p.name, p.category?.name || 'General', i + 1);
       
       // Handle collision if any
@@ -59,3 +57,4 @@ if (require.main === module) {
 }
 
 module.exports = { upgradeAllSkus };
+

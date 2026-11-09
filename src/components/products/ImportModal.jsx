@@ -37,6 +37,17 @@ const DEPT_2_LETTER_MAP = {
   'PACKING': 'PK', 'BOX': 'PK', 'TAPE': 'PK'
 };
 
+const VALID_DEPTS = new Set([
+  'SP', 'WC', 'WP', 'FP', 'FL', 'PL', 'ST', 'PF', 'NL', 'SW', 'RC', 'SC', 'SK', 'CF', 'TH', 'MS', 'SR', 'PK', 'GN'
+]);
+
+function isSmartSku(sku) {
+  if (!sku || typeof sku !== 'string') return false;
+  const parts = sku.trim().split('-');
+  if (parts.length < 2) return false;
+  return VALID_DEPTS.has(parts[0].toUpperCase());
+}
+
 function generateSmartSku(productName = '', categoryName = '', fallbackId = '') {
   const name = String(productName || '').trim();
   const cat = String(categoryName || '').trim().toUpperCase();
@@ -452,11 +463,11 @@ export default function ImportModal({ isOpen, onClose, onImported }) {
           }
         }
 
-        // If rawSku is missing, or is purely numeric ordinal (e.g. 2360), auto-generate Smart SKU [Dept]-[BK-number/code]-[Tier]
-        const isPureNumeric = rawSku && /^\d+$/.test(rawSku);
-        const skuVal = (!rawSku || isPureNumeric)
-          ? generateSmartSku(nameVal, catVal, r)
-          : rawSku;
+        // Auto-assign SKU: uses Smart SKU [Dept]-[BK-number/code]-[Tier]
+        // If raw code in Excel is missing or raw supplier code (E226, BK2129), generate full smart SKU
+        const skuVal = isSmartSku(rawSku)
+          ? rawSku.trim().toUpperCase()
+          : generateSmartSku(nameVal, catVal, r);
 
         const purVal = rawCost ? parseFloat(rawCost.replace(/[^0-9.-]+/g, '')) || 0 : 0;
         let sellVal = colSelling !== -1 ? parseFloat(String(row[colSelling]).replace(/[^0-9.-]+/g, '')) || 0 : 0;

@@ -3,7 +3,7 @@ const path = require('path');
 const express = require('express');
 const prisma = require('../prisma');
 const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
-const { generateSku, generateSmartSku, generateEan13Barcode, isValidEan13 } = require('../utils/barcode');
+const { generateSku, generateSmartSku, isSmartSku, generateEan13Barcode, isValidEan13 } = require('../utils/barcode');
 
 const router = express.Router();
 
@@ -93,15 +93,14 @@ router.post('/upgrade-skus', authenticateToken, requireRole(['ADMIN', 'MANAGER']
     const usedSkus = new Set();
 
     for (const p of products) {
-      if (p.sku && !p.sku.startsWith('CA-')) {
+      if (isSmartSku(p.sku)) {
         usedSkus.add(p.sku);
       }
     }
 
     for (let i = 0; i < products.length; i++) {
       const p = products[i];
-      const isLegacy = p.sku.startsWith('CA-') || !p.sku.includes('-');
-      if (isLegacy) {
+      if (!isSmartSku(p.sku)) {
         let newSku = generateSmartSku(p.name, p.category?.name || 'General', i + 1);
         let counter = 1;
         let finalSku = newSku;
@@ -613,9 +612,10 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
           continue;
         }
 
-        // Auto-assign SKU/Barcode if missing: uses Smart SKU [Dept]-[BK-number/code]-[Tier]
-        const sku = row.sku && row.sku.trim()
-          ? row.sku.trim()
+        // Auto-assign SKU: uses Smart SKU [Dept]-[BK-number/code]-[Tier]
+        // If raw code in Excel is missing or raw supplier code (E226, BK2129), generate full smart SKU
+        const sku = isSmartSku(row.sku)
+          ? row.sku.trim().toUpperCase()
           : generateSmartSku(row.name, row.category || 'General', i + 1);
         
         let barcode = row.barcode && String(row.barcode).trim() ? String(row.barcode).trim() : null;
