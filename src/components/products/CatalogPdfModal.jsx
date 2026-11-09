@@ -60,6 +60,62 @@ export default function CatalogPdfModal({
 
   // Generate clean, self-contained HTML for isolated printing & standalone export
   const generateCleanCatalogHtml = () => {
+    // 1-Per-Slide Lookbook Mode (Matching WhatsApp Mobile Catalog PDF format)
+    if (gridCols === 1) {
+      const slideCards = products
+        .map((item) => {
+          const price = getPrice(item);
+          const dimMatch = (item.name || '').match(/\b(\d+(?:\.\d+)?\s*[x*×]\s*\d+(?:\.\d+)?(?:\s*[x*×]\s*\d+(?:\.\d+)?)?\s*(?:cm|mm|in)?)\b/i);
+          const dimText = dimMatch ? dimMatch[1].toUpperCase() : '';
+          const categoryName = item.category?.name || item.category || 'Artifact';
+
+          return `
+          <div style="page-break-after:always;break-after:page;width:100%;height:100vh;display:flex;flex-direction:column;justify-content:space-between;box-sizing:border-box;background:#ffffff;">
+            <div style="width:100%;flex:1;display:flex;align-items:center;justify-content:center;background:#ffffff;overflow:hidden;">
+              ${item.imageUrl
+                ? `<img src="${item.imageUrl}" alt="${item.name}" style="width:100%;height:100%;object-fit:cover;" onerror="this.src='https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=70';"/>`
+                : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#a8a29e;font-size:16px;font-weight:bold;">PHOTO NOT AVAILABLE</div>`}
+            </div>
+            <div style="padding:16px 20px 20px 20px;background:#ffffff;border-top:1px solid #f5f5f4;">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;font-family:sans-serif;font-size:14px;font-weight:700;color:#1c1917;margin-bottom:6px;">
+                <span style="font-family:monospace;letter-spacing:0.5px;">${item.sku || item.name}</span>
+                <span style="color:#44403c;font-weight:600;font-size:13px;">${dimText}</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:baseline;font-family:sans-serif;font-size:12px;color:#78716c;">
+                <span style="text-transform:capitalize;font-weight:500;">${categoryName}</span>
+                <span style="font-weight:700;color:#1c1917;font-family:monospace;font-size:14px;">Rs.${Number(price).toLocaleString('en-IN')}/-</span>
+              </div>
+            </div>
+          </div>
+          `;
+        })
+        .join('\n');
+
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${biz.businessName} — Mobile Catalog Slide</title>
+  <style>
+    @page { size: 595pt 646pt; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #ffffff;
+      color: #1c1917;
+      margin: 0;
+      padding: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  </style>
+</head>
+<body>
+  ${slideCards}
+</body>
+</html>`;
+    }
+
     const htmlCards = products
       .map((item) => {
         const price = getPrice(item);
@@ -228,6 +284,16 @@ export default function CatalogPdfModal({
             <div className="flex items-center gap-1 bg-stone-900 border border-stone-800 p-1 rounded-xl text-xs">
               <button
                 type="button"
+                onClick={() => setGridCols(1)}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
+                  gridCols === 1 ? 'bg-amber-500 text-stone-950 font-bold' : 'text-stone-400 hover:text-stone-200'
+                }`}
+                title="1 Per Slide (WhatsApp Mobile Lookbook matching sample PDF)"
+              >
+                1 Per Slide (Lookbook)
+              </button>
+              <button
+                type="button"
                 onClick={() => setGridCols(2)}
                 className={`px-2.5 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
                   gridCols === 2 ? 'bg-amber-500 text-stone-950 font-bold' : 'text-stone-400 hover:text-stone-200'
@@ -309,7 +375,7 @@ export default function CatalogPdfModal({
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-stone-950">
           <div className="max-w-4xl mx-auto bg-stone-900 border border-stone-800 rounded-2xl p-6 sm:p-8 text-stone-100">
             {/* Luxury Header Preview */}
-            {showBusinessHeader && (
+            {showBusinessHeader && gridCols !== 1 && (
               <div className="border-b-2 border-amber-500 pb-4 mb-6 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-700 flex items-center justify-center text-black font-serif font-black text-xl tracking-tight shrink-0">
@@ -350,6 +416,58 @@ export default function CatalogPdfModal({
                 <p className="text-xs text-stone-500 mt-1">
                   Please select products using the checkboxes and click "PDF Catalog".
                 </p>
+              </div>
+            ) : gridCols === 1 ? (
+              <div className="flex flex-col items-center gap-8 max-w-lg mx-auto py-2">
+                <div className="w-full text-center text-xs text-amber-400 font-medium pb-2 border-b border-stone-800">
+                  📱 Mobile Slide Deck Lookbook (595 × 646 pt — 1 product per slide, matching reference PDF)
+                </div>
+                {products.map((item) => {
+                  const price = getPrice(item);
+                  const dimMatch = (item.name || '').match(
+                    /\b(\d+(?:\.\d+)?\s*[x*×]\s*\d+(?:\.\d+)?(?:\s*[x*×]\s*\d+(?:\.\d+)?)?\s*(?:cm|mm|in)?)\b/i
+                  );
+                  const dimText = dimMatch ? dimMatch[1].toUpperCase() : '';
+                  const categoryName = item.category?.name || item.category || 'Artifact';
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="w-full bg-white text-stone-900 rounded-2xl overflow-hidden shadow-2xl border border-stone-700 flex flex-col"
+                    >
+                      <div className="w-full aspect-square bg-stone-100 flex items-center justify-center overflow-hidden">
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src =
+                                'https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=800&q=70';
+                            }}
+                          />
+                        ) : (
+                          <div className="text-stone-400 font-bold text-sm tracking-widest">
+                            PHOTO NOT AVAILABLE
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4 bg-white border-t border-stone-100">
+                        <div className="flex justify-between items-baseline font-mono font-bold text-sm text-stone-900 mb-1">
+                          <span>{item.sku || item.name}</span>
+                          <span className="font-sans font-semibold text-xs text-stone-700">{dimText}</span>
+                        </div>
+                        <div className="flex justify-between items-baseline text-xs text-stone-500">
+                          <span className="capitalize font-medium">{categoryName}</span>
+                          <span className="font-mono font-bold text-sm text-stone-900">
+                            Rs.{Number(price).toLocaleString('en-IN')}/-
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div
