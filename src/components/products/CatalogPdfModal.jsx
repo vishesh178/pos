@@ -18,6 +18,7 @@ export default function CatalogPdfModal({
   const [priceType, setPriceType] = useState('mrp'); // 'mrp', 'sellingPrice', 'wholesalePrice'
   const [showSku, setShowSku] = useState(true);
   const [showBusinessHeader, setShowBusinessHeader] = useState(true);
+  const [minimalist, setMinimalist] = useState(false); // Only Mockup + SKU + Small MRP
   const [liveBiz, setLiveBiz] = useState(businessProfile);
 
   React.useEffect(() => {
@@ -65,6 +66,20 @@ export default function CatalogPdfModal({
         const imgTag = item.imageUrl
           ? `<img src="${item.imageUrl}" alt="${item.name}" style="width:100%;height:${gridCols === 2 ? '280px' : '200px'};object-fit:cover;border-radius:10px;background:#f5f5f4;" onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1513519245088-0e12902e5a38?auto=format&fit=crop&w=400&q=70';"/>`
           : `<div style="width:100%;height:${gridCols === 2 ? '280px' : '200px'};background:#f5f5f4;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#a8a29e;font-size:12px;font-weight:bold;">PHOTO NOT AVAILABLE</div>`;
+
+        if (minimalist) {
+          return `
+          <div style="background:#ffffff;border:1px solid #e7e5e4;border-radius:12px;padding:10px;display:flex;flex-direction:column;justify-content:space-between;page-break-inside:avoid;break-inside:avoid;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div>
+              ${imgTag}
+            </div>
+            <div style="margin-top:8px;padding-top:6px;border-top:1px solid #f5f5f4;display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-size:11px;font-weight:700;color:#292524;font-family:monospace;letter-spacing:0.5px;">${item.sku || ''}</span>
+              <span style="font-size:11px;font-weight:600;color:#78716c;font-family:monospace;">MRP: ₹${Number(price).toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+        `;
+        }
 
         return `
         <div style="background:#ffffff;border:1px solid #e7e5e4;border-radius:14px;padding:14px;display:flex;flex-direction:column;justify-content:space-between;page-break-inside:avoid;break-inside:avoid;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
@@ -244,6 +259,20 @@ export default function CatalogPdfModal({
               <option value="wholesalePrice">Show Wholesale Rate</option>
             </select>
 
+            {/* Minimalist Lookbook (Photo + SKU + Small MRP) */}
+            <button
+              type="button"
+              onClick={() => setMinimalist(!minimalist)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                minimalist
+                  ? 'bg-amber-500 text-stone-950 font-bold shadow-md shadow-amber-950/40'
+                  : 'bg-stone-900 border border-stone-800 text-stone-300 hover:text-white'
+              }`}
+              title="Minimalist Lookbook format: Mockup Photo + SKU + Small MRP only"
+            >
+              {minimalist ? '✓ Minimalist (Photo + SKU + MRP)' : 'Minimalist (Photo + SKU + MRP)'}
+            </button>
+
             {/* Print / Save as PDF Primary Button */}
             <button
               type="button"
@@ -359,32 +388,43 @@ export default function CatalogPdfModal({
                           )}
                         </div>
 
-                        {/* Optional SKU tag */}
-                        {showSku && item.sku && (
-                          <div className="text-[10px] font-mono font-bold text-amber-500 mb-1">
-                            CODE: {item.sku}
+                        {/* Optional SKU tag & Title or Minimalist Footer */}
+                        {minimalist ? (
+                          <div className="mt-2 pt-2 border-t border-stone-800 flex items-center justify-between text-xs font-mono">
+                            <span className="font-bold text-stone-200">{item.sku || 'NO-SKU'}</span>
+                            <span className="text-amber-400 font-semibold">MRP: ₹{Number(price).toLocaleString('en-IN')}</span>
                           </div>
+                        ) : (
+                          <>
+                            {showSku && item.sku && (
+                              <div className="text-[10px] font-mono font-bold text-amber-500 mb-1">
+                                CODE: {item.sku}
+                              </div>
+                            )}
+
+                            {/* 2. PRODUCT TITLE / NAME */}
+                            <h3 className="font-serif font-bold text-base text-stone-100 leading-snug">
+                              {item.name}
+                            </h3>
+                          </>
                         )}
-
-                        {/* 2. PRODUCT TITLE / NAME */}
-                        <h3 className="font-serif font-bold text-base text-stone-100 leading-snug">
-                          {item.name}
-                        </h3>
                       </div>
 
-                      {/* 3. PRODUCT PRICE (ONLY) */}
-                      <div className="mt-4 pt-3 border-t border-stone-800 flex items-baseline justify-between">
-                        <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">
-                          {priceType === 'mrp'
-                            ? 'MRP'
-                            : priceType === 'sellingPrice'
-                            ? 'Selling Price'
-                            : 'Wholesale Rate'}
-                        </span>
-                        <div className="text-xl font-black font-mono text-amber-400">
-                          ₹{Number(price).toLocaleString('en-IN')}
+                      {/* 3. PRODUCT PRICE (ONLY IN STANDARD MODE) */}
+                      {!minimalist && (
+                        <div className="mt-4 pt-3 border-t border-stone-800 flex items-baseline justify-between">
+                          <span className="text-[10px] uppercase font-bold text-stone-400 tracking-wider">
+                            {priceType === 'mrp'
+                              ? 'MRP'
+                              : priceType === 'sellingPrice'
+                              ? 'Selling Price'
+                              : 'Wholesale Rate'}
+                          </span>
+                          <div className="text-xl font-black font-mono text-amber-400">
+                            ₹{Number(price).toLocaleString('en-IN')}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}
