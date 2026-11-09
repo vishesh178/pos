@@ -82,6 +82,50 @@ router.get('/generate-sku', async (req, res) => {
   }
 });
 
+// POST /api/products/upgrade-skus - Upgrade all legacy SKUs (CA-GN-... or unformatted codes) to Smart [Dept]-[Code]-[Tier]
+router.post('/upgrade-skus', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
+  try {
+    const products = await prisma.product.findMany({
+      include: { category: true }
+    });
+
+    let updatedCount = 0;
+    const usedSkus = new Set();
+
+    for (const p of products) {
+      if (p.sku && !p.sku.startsWith('CA-')) {
+        usedSkus.add(p.sku);
+      }
+    }
+
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i];
+      const isLegacy = p.sku.startsWith('CA-') || !p.sku.includes('-');
+      if (isLegacy) {
+        let newSku = generateSmartSku(p.name, p.category?.name || 'General', i + 1);
+        let counter = 1;
+        let finalSku = newSku;
+        while (usedSkus.has(finalSku)) {
+          finalSku = `${newSku}-${counter}`;
+          counter++;
+        }
+        usedSkus.add(finalSku);
+
+        await prisma.product.update({
+          where: { id: p.id },
+          data: { sku: finalSku }
+        });
+        updatedCount++;
+      }
+    }
+
+    res.json({ success: true, updatedCount, totalProducts: products.length });
+  } catch (err) {
+    console.error('Error upgrading SKUs:', err);
+    res.status(500).json({ error: 'Failed to upgrade product SKUs.' });
+  }
+});
+
 // GET /api/products/generate-barcode - Next EAN-13 barcode helper
 router.get('/generate-barcode', async (req, res) => {
   try {
