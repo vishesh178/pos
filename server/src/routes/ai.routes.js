@@ -87,7 +87,7 @@ router.post('/generate-mockup', authenticateToken, requireRole(['ADMIN', 'MANAGE
 
   try {
     const product = await prisma.product.findUnique({
-      where: { id: parseInt(productId, 10) },
+      where: { id: String(productId) },
       include: { category: true }
     });
 
@@ -179,3 +179,4 @@ router.post('/generate-mockup', authenticateToken, requireRole(['ADMIN', 'MANAGE
 });
 
 module.exports = router;
+
