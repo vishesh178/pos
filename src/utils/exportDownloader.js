@@ -38,10 +38,17 @@ export async function downloadExportFile(url, fallbackFilename, token) {
     const link = document.createElement('a');
     link.href = blobUrl;
     link.download = filename;
+    link.target = '_self';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+
+    // Generous delay before cleanup for mobile Safari and Android WebViews
+    setTimeout(() => {
+      if (link.parentNode) {
+        document.body.removeChild(link);
+      }
+      URL.revokeObjectURL(blobUrl);
+    }, 3000);
     return true;
   } catch (err) {
     console.error('Download export file error:', err);

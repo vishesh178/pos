@@ -223,9 +223,29 @@ export default function CatalogPdfModal({
 </html>`;
   };
 
-  // ISOLATED PRINTING via hidden iframe to prevent the 13 phantom pages bug
+  // ISOLATED PRINTING via hidden iframe on desktop or new tab on mobile
   const handlePrint = () => {
     const cleanHtml = generateCleanCatalogHtml();
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+
+    if (isMobile) {
+      // Mobile Safari / Chrome cannot trigger print from 0-size hidden iframes
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(cleanHtml);
+        printWindow.document.close();
+        setTimeout(() => {
+          try {
+            printWindow.focus();
+            printWindow.print();
+          } catch (e) {
+            console.error('Mobile print trigger error:', e);
+          }
+        }, 500);
+        return;
+      }
+    }
 
     let iframe = document.getElementById('catalog-print-isolated-iframe');
     if (!iframe) {
@@ -258,9 +278,13 @@ export default function CatalogPdfModal({
     const link = document.createElement('a');
     link.href = url;
     link.download = `Curated_Art_Catalog_${new Date().toISOString().slice(0, 10)}.html`;
+    link.target = '_self';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    setTimeout(() => {
+      if (link.parentNode) document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 2500);
   };
 
   return (
@@ -357,6 +381,7 @@ export default function CatalogPdfModal({
               title="Download offline HTML catalog file"
             >
               <Download className="w-3.5 h-3.5" />
+              <span className="inline sm:hidden">HTML</span>
               <span className="hidden sm:inline">Download HTML</span>
             </button>
 

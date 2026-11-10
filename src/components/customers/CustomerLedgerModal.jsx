@@ -182,6 +182,33 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+      {/* Print-only CSS specifically for Customer Statement */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #customer-ledger-print-zone, #customer-ledger-print-zone * {
+            visibility: visible !important;
+          }
+          #customer-ledger-print-zone {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 10mm !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+        }
+      `}</style>
       <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[94dvh]">
         {/* Header */}
         <div className="p-3.5 sm:px-6 sm:py-4 border-b border-stone-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-stone-900/90 shrink-0">
@@ -227,11 +254,11 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
 
             <button
               onClick={handlePrint}
-              className="hidden sm:flex px-3 py-2 rounded-xl bg-stone-800 text-stone-300 hover:text-stone-100 hover:bg-stone-700 text-xs font-semibold items-center gap-1.5 transition-colors cursor-pointer"
+              className="px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl bg-stone-800 text-stone-300 hover:text-stone-100 hover:bg-stone-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
               title="Print formal statement"
             >
               <Printer className="w-4 h-4" />
-              <span>Print A4</span>
+              <span className="hidden sm:inline">Print A4</span>
             </button>
 
             <button
@@ -244,7 +271,7 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
         </div>
 
         {/* Content Body */}
-        <div className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1">
+        <div id="customer-ledger-print-zone" className="p-3.5 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6 flex-1">
           {loading ? (
             <div className="py-24 text-center text-stone-400 font-serif">
               <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />

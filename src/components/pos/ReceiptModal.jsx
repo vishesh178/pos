@@ -21,8 +21,38 @@ export default function ReceiptModal({ isOpen, onClose, invoice, businessProfile
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden my-6">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-3 sm:p-4 overflow-y-auto">
+      {/* Print-only CSS specifically for invoice isolation */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-receipt, #printable-receipt * {
+            visibility: visible !important;
+          }
+          #printable-receipt {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: ${layout === 'thermal' ? '80mm' : '100%'} !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 8px !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            box-shadow: none !important;
+            border: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          @page {
+            size: ${layout === 'thermal' ? '80mm auto' : 'A4 portrait'};
+            margin: ${layout === 'thermal' ? '0mm' : '8mm'};
+          }
+        }
+      `}</style>
+      <div className="bg-stone-900 border border-stone-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden my-4 sm:my-6">
         {/* Modal Top Actions */}
         <div className="px-6 py-3.5 border-b border-stone-800 flex items-center justify-between bg-stone-900/90">
           <div className="flex items-center gap-3">
@@ -335,22 +365,22 @@ export default function ReceiptModal({ isOpen, onClose, invoice, businessProfile
         </div>
 
         {/* Modal Bottom Action Bar */}
-        <div className="px-6 py-4 border-t border-stone-800 flex items-center justify-between bg-stone-900">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-stone-800 flex flex-wrap items-center justify-between gap-2 bg-stone-900">
           <button
             onClick={() => {
               onClose();
               if (onNewSale) onNewSale();
             }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-stone-800 text-stone-300 hover:text-stone-100 hover:bg-stone-700 text-xs font-semibold transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-stone-800 text-stone-300 hover:text-stone-100 hover:bg-stone-700 text-xs font-semibold transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>New Sale (F2)</span>
           </button>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={handlePrint}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition-all shadow-lg shadow-amber-950/40"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition-all shadow-lg shadow-amber-950/40 cursor-pointer"
             >
               <Printer className="w-4 h-4" />
               <span>Print Invoice</span>

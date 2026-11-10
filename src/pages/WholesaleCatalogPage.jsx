@@ -48,9 +48,13 @@ function exportToCsv(filename, rows) {
   const link = document.createElement('a');
   link.setAttribute('href', url);
   link.setAttribute('download', filename);
+  link.setAttribute('target', '_self');
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
+  setTimeout(() => {
+    if (link.parentNode) document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, 2500);
 }
 
 export default function WholesaleCatalogPage() {
@@ -271,7 +275,7 @@ export default function WholesaleCatalogPage() {
         if (it.imageUrl.startsWith('http://') || it.imageUrl.startsWith('https://')) {
           photoLink = it.imageUrl;
         } else if (it.imageUrl.startsWith('/uploads/')) {
-          photoLink = `http://localhost:5001${it.imageUrl}`;
+          photoLink = `${window.location.origin}${it.imageUrl}`;
         }
       }
       return {
@@ -385,9 +389,13 @@ export default function WholesaleCatalogPage() {
     const link = document.createElement('a');
     link.href = url;
     link.download = `Curated_Art_Wholesale_Lookbook_${new Date().toISOString().slice(0, 10)}.html`;
+    link.target = '_self';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    setTimeout(() => {
+      if (link.parentNode) document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }, 2500);
   };
 
   if (loading && !catalogData) {

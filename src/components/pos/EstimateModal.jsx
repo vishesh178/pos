@@ -470,6 +470,26 @@ export default function EstimateModal({
 
   const printIsolatedIframe = () => {
     const cleanHtml = generateCleanEstimateHtml(layout);
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+
+    if (isMobile) {
+      // Mobile Safari / Chrome cannot trigger print from 0-size hidden iframes
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(cleanHtml);
+        printWindow.document.close();
+        setTimeout(() => {
+          try {
+            printWindow.focus();
+            printWindow.print();
+          } catch (e) {
+            console.error('Mobile print trigger error:', e);
+          }
+        }, 500);
+        return;
+      }
+    }
 
     let iframe = document.getElementById('estimate-print-isolated-iframe');
     if (!iframe) {

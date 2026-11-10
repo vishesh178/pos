@@ -200,9 +200,12 @@ export default function SettingsPage() {
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', '');
+      link.setAttribute('target', '_self');
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      setTimeout(() => {
+        if (link.parentNode) document.body.removeChild(link);
+      }, 2500);
     } catch (err) {
       alert('Download failed: ' + err.message);
     } finally {
@@ -215,9 +218,12 @@ export default function SettingsPage() {
     const link = document.createElement('a');
     link.href = url;
     link.setAttribute('download', fileName);
+    link.setAttribute('target', '_self');
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    setTimeout(() => {
+      if (link.parentNode) document.body.removeChild(link);
+    }, 2500);
   };
 
   const handleDeleteBackup = async (fileName) => {
