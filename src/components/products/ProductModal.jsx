@@ -176,7 +176,7 @@ export default function ProductModal({ isOpen, onClose, product, onSaved, catego
               {isEdit ? 'Edit Product Item' : 'Add New Art & Décor Item'}
             </h3>
             <p className="text-xs text-amber-500">
-              {isEdit ? `Updating ${product.sku}` : 'Catalog entry with GST & Zoho mapping'}
+              {isEdit ? `Updating ${product.sku}` : 'Catalog entry with GST & HSN mapping'}
             </p>
           </div>
           <button

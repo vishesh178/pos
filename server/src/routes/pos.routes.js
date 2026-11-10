@@ -1,7 +1,7 @@
 const express = require('express');
 const prisma = require('../prisma');
 const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
-const { calculateInvoiceTotals, getZohoStateCode } = require('../utils/gst');
+const { calculateInvoiceTotals } = require('../utils/gst');
 
 const router = express.Router();
 
@@ -203,7 +203,6 @@ router.post('/checkout', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BI
           paymentMethod: paymentMethod || 'CASH',
           notes: notes ? notes.trim() : null,
           status: 'COMPLETED',
-          zohoSyncStatus: 'PENDING',
         },
       });
 

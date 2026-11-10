@@ -495,7 +495,7 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTORY'
     const maxRetail = mrp ? parseFloat(mrp) : price;
     const gst = gstRate !== undefined ? parseFloat(gstRate) : 0.0;
 
-    // Transaction to create product + initial opening stock movement + Zoho SyncJob
+    // Transaction to create product + initial opening stock movement
     const product = await prisma.$transaction(async (tx) => {
       const newProduct = await tx.product.create({
         data: {
@@ -517,7 +517,6 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTORY'
           unit: unit ? unit.trim().toUpperCase() : 'PCS',
           supplierId: supplierId || null,
           status: status || 'ACTIVE',
-          zohoSyncStatus: 'PENDING',
         },
       });
 
@@ -615,7 +614,6 @@ router.put('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTOR
           unit: unit !== undefined ? unit.trim().toUpperCase() : undefined,
           supplierId: supplierId !== undefined ? supplierId : undefined,
           status: status !== undefined ? status : undefined,
-          zohoSyncStatus: 'PENDING',
         },
       });
 

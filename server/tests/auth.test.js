@@ -6,7 +6,7 @@ const { generateToken } = require('../src/middleware/auth');
 const jwt = require('jsonwebtoken');
 
 test('Crypto utility encrypts and decrypts with AES-256-GCM', () => {
-  const secret = 'zoho_secret_12345_token_xyz';
+  const secret = 'erp_secret_12345_token_xyz';
   const encrypted = encrypt(secret);
   assert.notEqual(encrypted, secret);
   assert.match(encrypted, /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);

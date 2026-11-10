@@ -128,8 +128,6 @@ router.get('/:id/ledger', authenticateToken, async (req, res) => {
         paymentMethod: inv.paymentMethod,
         balanceAmount: inv.balanceAmount,
         invoiceId: inv.id,
-        zohoInvoiceId: inv.zohoInvoiceId,
-        zohoSyncStatus: inv.zohoSyncStatus,
       });
     }
 
@@ -144,8 +142,6 @@ router.get('/:id/ledger', authenticateToken, async (req, res) => {
         debit: 0,
         credit: p.amount,
         paymentMethod: p.paymentMethod,
-        zohoPaymentId: p.zohoPaymentId,
-        zohoSyncStatus: p.zohoSyncStatus,
       });
     }
 
@@ -182,13 +178,9 @@ router.get('/:id/ledger', authenticateToken, async (req, res) => {
     // Filter unpaid invoices for quick settlement
     const unpaidInvoices = invoices.filter((inv) => inv.balanceAmount > 0);
 
-    // No external Zoho contact fetch in standalone mode
-    const zohoContact = null;
-
     res.json({
       customer,
       business,
-      zohoContact,
       summary: {
         openingBalance: customer.openingBalance || 0,
         totalDebit,
@@ -196,9 +188,6 @@ router.get('/:id/ledger', authenticateToken, async (req, res) => {
         netBalanceDue,
         invoicesCount: invoices.length,
         unpaidInvoicesCount: unpaidInvoices.length,
-        zohoOutstanding: zohoContact?.outstanding_receivable_amount !== undefined
-          ? parseFloat(zohoContact.outstanding_receivable_amount)
-          : null,
       },
       unpaidInvoices,
       transactions,
@@ -253,7 +242,6 @@ router.post('/:id/payments', authenticateToken, requireRole(['ADMIN', 'MANAGER',
           orderBy: { createdAt: 'asc' },
         });
 
-        const appliedZohoInvoices = [];
         let remaining = payAmt;
         for (const inv of unpaidInvoices) {
           if (remaining <= 0) break;
@@ -682,7 +670,6 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
               msmeNo: cleanMsme,
               openingBalance: openBal,
               currentBalance: openBal,
-              zohoSyncStatus: 'PENDING',
             },
           });
 
@@ -802,7 +789,6 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
             pricebookId: assignedPbId,
             openingBalance: openBal,
             currentBalance: openBal,
-            zohoSyncStatus: 'PENDING',
           },
         });
 
@@ -840,7 +826,7 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER', 
   }
 });
 
-// POST /api/customers - Create customer & enqueue Zoho Contact Sync
+// POST /api/customers - Create customer
 router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING']), async (req, res) => {
   try {
     const {
@@ -915,7 +901,6 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING'])
           pricebookId: assignedPricebookId,
           openingBalance: openBal,
           currentBalance: openBal,
-          zohoSyncStatus: 'PENDING',
         },
         include: { pricebook: true },
       });
@@ -970,7 +955,6 @@ router.put('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BILLING'
           stateCode: stateCode !== undefined ? stateCode : undefined,
           customerType: customerType !== undefined ? customerType : undefined,
           pricebookId: pricebookId !== undefined ? pricebookId : undefined,
-          zohoSyncStatus: 'PENDING',
         },
         include: { pricebook: true },
       });

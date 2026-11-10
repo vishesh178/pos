@@ -356,7 +356,7 @@ export default function SalesReturnsPage() {
             </div>
           </div>
           <p className="text-xs text-stone-300">
-            Stock movements and inventory adjustments were logged. Outbox sync job enqueued for Zoho Books.
+            Stock movements and inventory adjustments were logged.
           </p>
         </div>
       )}

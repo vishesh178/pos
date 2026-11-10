@@ -29,21 +29,7 @@ async function seed() {
     console.log('✓ Business Profile initialized');
   }
 
-  // 2. Default ZohoConfig
-  const existingZoho = await prisma.zohoConfig.findUnique({ where: { id: 'default' } });
-  if (!existingZoho) {
-    await prisma.zohoConfig.create({
-      data: {
-        id: 'default',
-        dcDomain: 'in',
-        isConnected: false,
-        autoSyncEnabled: true,
-      },
-    });
-    console.log('✓ Default Zoho configuration initialized');
-  }
-
-  // 3. Users with standard passwords (admin123, manager123, cashier123)
+  // 2. Users with standard passwords (admin123, manager123, cashier123)
   const users = [
     {
       name: 'Viren Shah (Owner/Admin)',

@@ -41,27 +41,10 @@ model User {
   updatedAt    DateTime   @updatedAt
 }
 
-model ZohoConfig {
-  id                    String    @id @default("default")
-  clientId              String?
-  clientSecretEncrypted String?
-  refreshTokenEncrypted String?
-  accessToken           String?
-  tokenExpiresAt        DateTime?
-  organizationId        String?
-  dcDomain              String    @default("in") // in = accounts.zoho.in, api.zoho.in
-  isConnected           Boolean   @default(false)
-  autoSyncEnabled       Boolean   @default(true)
-  lastSyncAt            DateTime?
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-}
-
 model Category {
   id             String    @id @default(cuid())
   name           String    @unique
   description    String?
-  zohoCategoryId String?
   products       Product[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -89,9 +72,6 @@ model Product {
   supplierId         String?
   supplier           Supplier?           @relation(fields: [supplierId], references: [id])
   status             String              @default("ACTIVE") // ACTIVE, INACTIVE, DISCONTINUED
-  zohoItemId         String?
-  zohoSyncStatus     String              @default("PENDING")
-  zohoLastSyncedAt   DateTime?
   invoiceItems       InvoiceItem[]
   estimateItems      EstimateItem[]
   purchaseOrderItems PurchaseOrderItem[]
@@ -121,8 +101,6 @@ model Customer {
   pricebook       Pricebook? @relation(fields: [pricebookId], references: [id])
   openingBalance  Float      @default(0.0)
   currentBalance  Float      @default(0.0)
-  zohoContactId   String?
-  zohoSyncStatus  String     @default("PENDING")
   invoices        Invoice[]
   estimates       Estimate[]
   payments        Payment[]
@@ -146,8 +124,6 @@ model Supplier {
   gstDate        String?
   openingBalance Float           @default(0.0)
   currentBalance Float           @default(0.0)
-  zohoContactId  String?
-  zohoSyncStatus String          @default("PENDING")
   products       Product[]
   purchaseOrders PurchaseOrder[]
   purchaseBills  PurchaseBill[]
@@ -182,8 +158,6 @@ model Invoice {
   paymentMethod  String        @default("CASH") // CASH, UPI, CARD, BANK_TRANSFER, SPLIT
   notes          String?
   status         String        @default("COMPLETED") // COMPLETED, CANCELLED, RETURNED
-  zohoInvoiceId  String?
-  zohoSyncStatus String        @default("PENDING")
   items          InvoiceItem[]
   payments       Payment[]
   salesReturns   SalesReturn[]
@@ -225,8 +199,6 @@ model Payment {
   amount          Float
   referenceNumber String?
   notes           String?
-  zohoPaymentId   String?
-  zohoSyncStatus  String        @default("PENDING")
   createdAt       DateTime      @default(now())
 }
 
@@ -266,7 +238,6 @@ model PurchaseOrder {
   taxTotal     Float               @default(0.0)
   grandTotal   Float               @default(0.0)
   notes        String?
-  zohoPoId     String?
   items        PurchaseOrderItem[]
   bills        PurchaseBill[]
   createdAt    DateTime            @default(now())
@@ -301,8 +272,6 @@ model PurchaseBill {
   paidAmount         Float              @default(0.0)
   paymentStatus      String             @default("UNPAID") // PAID, PARTIAL, UNPAID
   notes              String?
-  zohoBillId         String?
-  zohoSyncStatus     String             @default("PENDING")
   items              PurchaseBillItem[]
   payments           Payment[]
   createdAt          DateTime           @default(now())
@@ -347,8 +316,6 @@ model Expense {
   paymentMethod  String   @default("BANK_TRANSFER")
   receiptUrl     String?
   expenseDate    DateTime @default(now())
-  zohoExpenseId  String?
-  zohoSyncStatus String   @default("PENDING")
   createdBy      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -358,7 +325,6 @@ model SyncJob {
   id              String    @id @default(cuid())
   entityType      String // PRODUCT, CUSTOMER, SUPPLIER, INVOICE, BILL, EXPENSE, ADJUSTMENT
   localRecordId   String
-  zohoRecordId    String?
   operation       String // CREATE, UPDATE, DELETE
   payload         String // JSON string
   status          String    @default("PENDING") // PENDING, PROCESSING, SYNCED, FAILED, RETRY_SCHEDULED
@@ -409,8 +375,6 @@ model Estimate {
   notes              String?
   status             String         @default("PENDING") // PENDING, CONVERTED, CANCELLED
   convertedInvoiceId String?
-  zohoEstimateId     String?
-  zohoSyncStatus     String         @default("PENDING")
   items              EstimateItem[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
@@ -446,8 +410,6 @@ model Pricebook {
   pricingType        String     @default("DISCOUNT") // DISCOUNT, MARKUP
   isDefault          Boolean    @default(false)
   isActive           Boolean    @default(true)
-  zohoPricebookId    String?
-  zohoSyncStatus     String     @default("PENDING")
   customers          Customer[]
   invoices           Invoice[]
   estimates          Estimate[]

@@ -24,7 +24,7 @@ router.get('/suppliers', async (req, res) => {
   }
 });
 
-// POST /api/purchases/suppliers - Create supplier & enqueue Zoho Vendor Sync
+// POST /api/purchases/suppliers - Create supplier
 router.post('/suppliers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTORY']), async (req, res) => {
   try {
     const { name, contactPerson, mobile, email, gstin, address, state, stateCode, openingBalance } = req.body;
@@ -48,7 +48,6 @@ router.post('/suppliers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'I
           stateCode: stateCode || '24',
           openingBalance: openBal,
           currentBalance: openBal,
-          zohoSyncStatus: 'PENDING',
         },
       });
 
@@ -248,7 +247,6 @@ router.post('/bills', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVEN
           paidAmount: paid,
           paymentStatus,
           notes: notes ? notes.trim() : null,
-          zohoSyncStatus: 'PENDING',
         },
       });
 

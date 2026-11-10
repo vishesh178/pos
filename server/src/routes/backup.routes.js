@@ -364,7 +364,6 @@ router.post('/factory-reset', authenticateToken, requireRole('ADMIN'), async (re
         prisma.generalAccount.deleteMany(),
         prisma.user.deleteMany(),
         prisma.businessProfile.deleteMany(),
-        prisma.zohoConfig.deleteMany(),
       ]);
     } finally {
       await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON;');

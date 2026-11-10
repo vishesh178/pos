@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const prisma = require('../prisma');
 const { authenticateToken, requireRole } = require('../middleware/auth');
-const { calculateInvoiceTotals, getZohoStateCode } = require('../utils/gst');
+const { calculateInvoiceTotals } = require('../utils/gst');
 const { generateEstimatePdf } = require('../utils/estimatePdf');
 
 // GET /api/estimates - List estimates with filter & search

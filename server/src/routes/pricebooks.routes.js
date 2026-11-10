@@ -96,7 +96,6 @@ router.post('/', authenticateToken, requireRole('ADMIN'), async (req, res) => {
         pricingType: pricingType || 'DISCOUNT',
         isDefault: !!isDefault,
         isActive: true,
-        zohoSyncStatus: 'PENDING',
       },
     });
 

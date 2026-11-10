@@ -34,7 +34,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/expenses - Record new expense & enqueue Zoho Books Expense Sync
+// POST /api/expenses - Record new expense
 router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (req, res) => {
   try {
     const {
@@ -69,7 +69,6 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (re
           receiptUrl: receiptUrl || null,
           expenseDate: expenseDate ? new Date(expenseDate) : new Date(),
           createdBy: req.user.name,
-          zohoSyncStatus: 'PENDING',
         },
       });
 

@@ -238,3 +238,4 @@ async function generateEstimatePdf(estimate, business = {}) {
 }
 
 module.exports = { generateEstimatePdf };
+

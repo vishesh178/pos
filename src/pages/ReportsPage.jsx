@@ -1008,7 +1008,7 @@ export default function ReportsPage() {
             </div>
 
             <p className="text-[10px] text-stone-400 mt-4 leading-relaxed">
-              * Note: Real-time estimate based on actual purchase costs and logged expenses. Formal financial statement requires final tax depreciation and CPA adjustments in Zoho Books.
+              * Note: Real-time estimate based on actual purchase costs and logged expenses.
             </p>
           </div>
         </div>

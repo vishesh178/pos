@@ -77,7 +77,6 @@ export default function App() {
                 <Route path="returns" element={<SalesReturnsPage />} />
                 <Route path="expenses" element={<ExpensesPage />} />
                 <Route path="reports" element={<ReportsPage />} />
-                <Route path="zoho-sync" element={<Navigate to="/settings" replace />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />

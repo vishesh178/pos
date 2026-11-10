@@ -425,7 +425,7 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
 
                   <div className="flex items-center justify-between pt-2 border-t border-stone-800 text-xs">
                     <p className="text-[11px] text-stone-400">
-                      ℹ️ This payment will be recorded in the ledger, automatically credited towards oldest pending bills, and synced with Zoho Books.
+                      ℹ️ This payment will be recorded in the ledger and automatically credited towards oldest pending bills.
                     </p>
                     <div className="flex gap-2">
                       <button

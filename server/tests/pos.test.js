@@ -71,7 +71,6 @@ test('POS invoice generation produces sequential numbering and atomic stock move
         paymentStatus: 'PAID',
         paymentMethod: 'UPI',
         status: 'COMPLETED',
-        zohoSyncStatus: 'PENDING',
       },
     });
 

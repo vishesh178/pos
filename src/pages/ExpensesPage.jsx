@@ -121,7 +121,7 @@ export default function ExpensesPage() {
             <span>Showroom Operational Expenses</span>
           </h1>
           <p className="text-xs text-stone-400 mt-1">
-            Track rent, staff salaries, packaging, freight, and utility costs with Zoho Books sync
+            Track rent, staff salaries, packaging, freight, and utility costs
           </p>
         </div>
 

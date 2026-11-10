@@ -108,7 +108,7 @@ app.use('/assets', express.static(path.join(distPath, 'assets'), {
   immutable: true,
 }));
 
-// Ensure assets are served even when loaded from nested SPA routes (e.g. /zoho-sync/assets/...)
+// Ensure assets are served even when loaded from nested SPA routes (e.g. /invoices/assets/...)
 app.use((req, res, next) => {
   if (req.path.includes('/assets/')) {
     const filename = req.path.split('/assets/').pop();

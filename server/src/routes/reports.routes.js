@@ -130,10 +130,6 @@ router.get('/dashboard', optionalAuth, async (req, res) => {
     });
     const expenseChart = Object.entries(expCatMap).map(([name, value]) => ({ name, value }));
 
-    // 9. Sync Jobs Health
-    const failedSyncCount = await prisma.syncJob.count({ where: { status: 'FAILED' } });
-    const pendingSyncCount = await prisma.syncJob.count({ where: { status: 'PENDING' } });
-
     const isAdmin = req.user && req.user.role === 'ADMIN';
 
     res.json({
