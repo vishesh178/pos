@@ -1,7 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const PDFDocument = require('pdfkit');
+let PDFDocument = null;
+try {
+  PDFDocument = require('pdfkit');
+} catch (_) {
+  // Graceful lazy-load fallback so server starts even if npm install hasn't run yet
+}
 
 /**
  * Resolve an image source into a Buffer if possible
@@ -128,6 +133,16 @@ async function generateCatalogPdf(products = [], options = {}, biz = {}) {
 
   return new Promise((resolve, reject) => {
     try {
+      if (!PDFDocument) {
+        try {
+          PDFDocument = require('pdfkit');
+        } catch (_) {
+          return reject(
+            new Error("PDF engine (pdfkit) is not yet installed on this server. Please run 'npm install' on the server.")
+          );
+        }
+      }
+
       const isLookbook = Number(gridCols) === 1;
 
       const doc = new PDFDocument({
@@ -421,3 +436,4 @@ module.exports = {
   resolvePrice,
   formatRupees,
 };
+
