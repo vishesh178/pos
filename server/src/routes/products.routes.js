@@ -4,6 +4,7 @@ const express = require('express');
 const prisma = require('../prisma');
 const { authenticateToken, requireRole, optionalAuth } = require('../middleware/auth');
 const { generateSku, generateSmartSku, isSmartSku, generateEan13Barcode, isValidEan13 } = require('../utils/barcode');
+const { generateCatalogPdf } = require('../utils/catalogPdf');
 
 const router = express.Router();
 
@@ -347,6 +348,78 @@ router.get('/wholesale-catalog', async (req, res) => {
     res.status(500).json({ error: 'Failed to generate wholesale catalog.' });
   }
 });
+
+// POST & GET /api/products/catalog-pdf - Generate downloadable binary PDF catalog
+const handleCatalogPdf = async (req, res) => {
+  try {
+    const isPost = req.method === 'POST';
+    const params = isPost ? (req.body || {}) : req.query;
+
+    let productIds = [];
+    if (Array.isArray(params.productIds)) {
+      productIds = params.productIds;
+    } else if (params.ids && typeof params.ids === 'string') {
+      productIds = params.ids.split(',').map((s) => s.trim()).filter(Boolean);
+    } else if (params.productIds && typeof params.productIds === 'string') {
+      productIds = params.productIds.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+
+    const priceType = params.priceType || 'mrp';
+    const gridCols = Number(params.gridCols) || 1;
+    const minimalist = params.minimalist === true || params.minimalist === 'true';
+    const showSku = params.showSku !== false && params.showSku !== 'false';
+    const showBusinessHeader = params.showBusinessHeader !== false && params.showBusinessHeader !== 'false';
+
+    const where = {};
+    if (productIds.length > 0) {
+      where.id = { in: productIds };
+    } else {
+      where.status = 'ACTIVE';
+    }
+
+    const products = await prisma.product.findMany({
+      where,
+      include: { category: true },
+      orderBy: { name: 'asc' },
+    });
+
+    // If specific productIds were requested, preserve that exact selection order
+    let sortedProducts = products;
+    if (productIds.length > 0) {
+      const idMap = new Map(products.map((p) => [p.id, p]));
+      sortedProducts = productIds.map((id) => idMap.get(id)).filter(Boolean);
+    }
+
+    const bizProfile = await prisma.businessProfile.findFirst();
+
+    const pdfBuffer = await generateCatalogPdf(
+      sortedProducts,
+      {
+        gridCols,
+        priceType,
+        minimalist,
+        showSku,
+        showBusinessHeader,
+      },
+      bizProfile || {}
+    );
+
+    const filename = gridCols === 1
+      ? `Curated_Art_Catalog_Lookbook_${new Date().toISOString().slice(0, 10)}.pdf`
+      : `Curated_Art_Catalog_${gridCols}Col_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.end(pdfBuffer);
+  } catch (err) {
+    console.error('Catalog PDF generation error:', err);
+    res.status(500).json({ error: 'Failed to generate PDF catalog.' });
+  }
+};
+
+router.post('/catalog-pdf', optionalAuth, handleCatalogPdf);
+router.get('/catalog-pdf', optionalAuth, handleCatalogPdf);
 
 // GET /api/products/:id - Single product with stock movement history
 router.get('/:id', optionalAuth, async (req, res) => {

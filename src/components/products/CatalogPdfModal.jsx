@@ -6,7 +6,11 @@ import {
   Package,
   Sparkles,
   Layers,
+  FileDown,
+  Loader2,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { downloadExportFile } from '../../utils/exportDownloader';
 
 export default function CatalogPdfModal({
   isOpen,
@@ -14,12 +18,14 @@ export default function CatalogPdfModal({
   products = [],
   businessProfile = null,
 }) {
+  const { token } = useAuth();
   const [gridCols, setGridCols] = useState(2); // 2 or 3 columns
   const [priceType, setPriceType] = useState('mrp'); // 'mrp', 'sellingPrice', 'wholesalePrice'
   const [showSku, setShowSku] = useState(true);
   const [showBusinessHeader, setShowBusinessHeader] = useState(true);
   const [minimalist, setMinimalist] = useState(false); // Only Mockup + SKU + Small MRP
   const [liveBiz, setLiveBiz] = useState(businessProfile);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   React.useEffect(() => {
     if (businessProfile) {
@@ -250,6 +256,41 @@ export default function CatalogPdfModal({
     window.print();
   };
 
+  // CROSS-PLATFORM SERVER-SIDE PDF DOWNLOAD (100% reliable on iOS Standalone PWA, Android, and Desktops)
+  const handleDownloadPdf = async () => {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      const payload = {
+        productIds: products.map((p) => p.id),
+        priceType,
+        gridCols,
+        minimalist,
+        showSku,
+        showBusinessHeader,
+      };
+      const fallbackName =
+        gridCols === 1
+          ? `Curated_Art_Catalog_Lookbook_${new Date().toISOString().slice(0, 10)}.pdf`
+          : `Curated_Art_Catalog_${gridCols}Col_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+      await downloadExportFile(
+        '/api/products/catalog-pdf',
+        fallbackName,
+        token,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      );
+    } catch (err) {
+      console.error('Download PDF catalog error:', err);
+      alert('Failed to generate catalog PDF: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
   const handleDownloadHtml = () => {
     const htmlDoc = generateCleanCatalogHtml();
     const blob = new Blob([htmlDoc], { type: 'text/html;charset=utf-8;' });
@@ -397,14 +438,33 @@ export default function CatalogPdfModal({
               {minimalist ? '✓ Minimalist (Photo + SKU + MRP)' : 'Minimalist (Photo + SKU + MRP)'}
             </button>
 
-            {/* Print / Save as PDF Primary Button */}
+            {/* Download Real PDF Button (Cross-platform, Works on Mobile PWA & iOS) */}
+            <button
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={downloadingPdf}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-all shadow-md shadow-amber-950/40 cursor-pointer ${
+                downloadingPdf ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
+              title="Download true PDF document directly to your device or files"
+            >
+              {downloadingPdf ? (
+                <Loader2 className="w-4 h-4 animate-spin text-stone-950" />
+              ) : (
+                <FileDown className="w-4 h-4" />
+              )}
+              <span>{downloadingPdf ? 'Generating PDF...' : 'Download PDF Catalog'}</span>
+            </button>
+
+            {/* Direct Hardware Print Button */}
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-all shadow-md shadow-amber-950/40 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-xs border border-stone-700 transition-colors cursor-pointer"
+              title="Send to connected printer or desktop system dialog"
             >
-              <Printer className="w-4 h-4" />
-              <span>Print / Save as PDF</span>
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Print</span>
             </button>
 
             {/* Standalone HTML Catalog Download */}

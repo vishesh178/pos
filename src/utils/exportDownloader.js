@@ -4,14 +4,21 @@
  * - Checks response status: if token expired (401) or forbidden (403), alerts the user cleanly
  * - Triggers instant client-side file save with guaranteed filename and extension
  */
-export async function downloadExportFile(url, fallbackFilename, token) {
+export async function downloadExportFile(url, fallbackFilename, token, options = {}) {
   try {
-    const headers = {};
+    const headers = { ...(options.headers || {}) };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
+    if (options.body && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
 
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, {
+      method: options.method || 'GET',
+      headers,
+      body: options.body,
+    });
 
     if (!res.ok) {
       let message = `Export failed with status ${res.status}`;
