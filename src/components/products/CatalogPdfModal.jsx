@@ -396,8 +396,8 @@ export default function CatalogPdfModal({
           </div>
         </div>
 
-        {/* Scrollable Preview Container */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-stone-950">
+        {/* Scrollable Preview Container with momentum touch scrolling */}
+        <div className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-8 bg-stone-950" style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="max-w-4xl mx-auto bg-stone-900 border border-stone-800 rounded-2xl p-6 sm:p-8 text-stone-100">
             {/* Luxury Header Preview */}
             {showBusinessHeader && gridCols !== 1 && (
@@ -458,13 +458,15 @@ export default function CatalogPdfModal({
                   return (
                     <div
                       key={item.id}
-                      className="w-full bg-white text-stone-900 rounded-2xl overflow-hidden shadow-2xl border border-stone-700 flex flex-col"
+                      className="catalog-card-optimized w-full bg-white text-stone-900 rounded-2xl overflow-hidden shadow-md border border-stone-700 flex flex-col"
                     >
                       <div className="w-full aspect-square bg-stone-100 flex items-center justify-center overflow-hidden">
                         {item.imageUrl ? (
                           <img
                             src={item.imageUrl}
                             alt={item.name}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover"
                             onError={(e) => {
                               e.target.onerror = null;
@@ -505,7 +507,7 @@ export default function CatalogPdfModal({
                   return (
                     <div
                       key={item.id}
-                      className="bg-stone-950/70 border border-stone-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm"
+                      className="catalog-card-optimized bg-stone-950/70 border border-stone-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm"
                     >
                       <div>
                         {/* 1. PRODUCT IMAGE */}
@@ -514,6 +516,8 @@ export default function CatalogPdfModal({
                             <img
                               src={item.imageUrl}
                               alt={item.name}
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover"
                               onError={(e) => {
                                 e.target.onerror = null;

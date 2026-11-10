@@ -414,7 +414,7 @@ export default function ProductsPage() {
             return (
               <div
                 key={p.id}
-                className={`p-3.5 bg-stone-900 border rounded-2xl shadow-lg space-y-3 transition-colors ${
+                className={`catalog-card-optimized p-3.5 bg-stone-900 border rounded-2xl shadow-sm space-y-3 transition-colors ${
                   selectedProductIds.has(p.id) ? 'border-amber-500/60 bg-amber-950/10' : 'border-stone-800'
                 }`}
               >
@@ -436,6 +436,8 @@ export default function ProductsPage() {
                       <img
                         src={p.imageUrl}
                         alt={p.name}
+                        loading="lazy"
+                        decoding="async"
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           e.target.onerror = null;
@@ -628,6 +630,8 @@ export default function ProductsPage() {
                               <img
                                 src={p.imageUrl}
                                 alt={p.name}
+                                loading="lazy"
+                                decoding="async"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
                                   e.target.onerror = null;

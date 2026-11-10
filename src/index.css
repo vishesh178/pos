@@ -11,5 +11,16 @@
     --accent-gold: #d97706;
     --accent-gold-hover: #b45309;
   }
+
+  html, body, #root, main, .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Offscreen Card Optimization for ultra-fast mobile 60fps scrolling */
+.catalog-card-optimized {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 320px;
 }
 

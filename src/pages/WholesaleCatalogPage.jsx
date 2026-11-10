@@ -97,6 +97,13 @@ export default function WholesaleCatalogPage() {
   );
   const [isEditingTerms, setIsEditingTerms] = useState(false);
 
+  // Progressive rendering limit for silky-smooth mobile 60fps scrolling
+  const [visibleCount, setVisibleCount] = useState(36);
+
+  useEffect(() => {
+    setVisibleCount(36);
+  }, [selectedCategory, minStock, searchQuery, onlySelected]);
+
   const fetchCatalog = async () => {
     setLoading(true);
     try {
@@ -200,6 +207,11 @@ export default function WholesaleCatalogPage() {
     });
   }, [catalogData, selectedCategory, searchQuery, onlySelected, selectedItemIds]);
 
+  // Sliced items for responsive DOM rendering & smooth mobile scrolling
+  const displayedItems = useMemo(() => {
+    return filteredItems.slice(0, visibleCount);
+  }, [filteredItems, visibleCount]);
+
   // Adjust price according to discount/surcharge slider
   const getAdjustedPrice = (basePrice) => {
     if (!priceAdjustment) return basePrice;
@@ -264,7 +276,10 @@ export default function WholesaleCatalogPage() {
   };
 
   const handlePrint = () => {
-    window.print();
+    setVisibleCount(filteredItems.length);
+    setTimeout(() => {
+      window.print();
+    }, 150);
   };
 
   const handleExportCsv = () => {
@@ -800,18 +815,18 @@ export default function WholesaleCatalogPage() {
         {/* LAYOUT 1: VISUAL LOOKBOOK (LUXURY GRID CARDS) */}
         {/* ------------------------------------------------------------------- */}
         {layoutMode === 'cards' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 print:grid-cols-3 print:gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 print:grid-cols-3 print:gap-3">
             {filteredItems.length === 0 ? (
               <div className="col-span-full py-12 text-center text-stone-400 font-serif">
                 No available in-stock items match the selected filter.
               </div>
             ) : (
-              filteredItems.map((item) => {
+              displayedItems.map((item) => {
                 const effPrice = getAdjustedPrice(item.wholesalePrice);
                 return (
                   <div
                     key={item.id}
-                    className={`group p-4 bg-stone-950/80 border rounded-2xl flex flex-col justify-between hover:shadow-xl hover:shadow-amber-950/20 transition-all print:bg-white print:border-stone-300 print:text-black print:break-inside-avoid relative ${
+                    className={`catalog-card-optimized group p-4 bg-stone-950 border rounded-2xl flex flex-col justify-between transition-colors print:bg-white print:border-stone-300 print:text-black print:break-inside-avoid relative ${
                       selectedItemIds.has(item.id)
                         ? 'border-amber-500/80 bg-amber-950/20 shadow-lg shadow-amber-950/30'
                         : 'border-stone-800 hover:border-amber-500/50'
@@ -849,6 +864,8 @@ export default function WholesaleCatalogPage() {
                             <img
                               src={item.imageUrl}
                               alt={item.name}
+                              loading="lazy"
+                              decoding="async"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                               onError={(e) => {
                                 e.target.onerror = null;
@@ -866,13 +883,13 @@ export default function WholesaleCatalogPage() {
                           )}
 
                           {/* Zoom Button Hover Indicator */}
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-xs font-semibold text-amber-300 backdrop-blur-[2px] print:hidden">
+                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-xs font-semibold text-amber-300 print:hidden">
                             <ZoomIn className="w-4 h-4" />
                             <span>Inspect Photo</span>
                           </div>
 
                           {/* Available Stock Pill */}
-                          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-stone-950/90 border border-stone-700/80 backdrop-blur-md text-[10px] font-bold text-emerald-400 shadow-md print:bg-white print:text-black print:border-black">
+                          <div className="absolute top-2 right-2 px-2 py-0.5 rounded-md bg-stone-950/95 border border-stone-700/80 text-[10px] font-bold text-emerald-400 shadow-sm print:bg-white print:text-black print:border-black">
                             {showExactStock
                               ? `${Number(item.currentStock.toFixed(2))} ${item.unit} In Stock`
                               : 'Ready Stock'}
@@ -936,6 +953,19 @@ export default function WholesaleCatalogPage() {
           </div>
         )}
 
+        {/* Load More Button for Cards Mode */}
+        {layoutMode === 'cards' && displayedItems.length < filteredItems.length && (
+          <div className="py-6 text-center print:hidden">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((prev) => prev + 36)}
+              className="px-6 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs font-semibold border border-stone-700 transition-colors cursor-pointer shadow-md"
+            >
+              Load More Designs ({displayedItems.length} of {filteredItems.length} shown)
+            </button>
+          </div>
+        )}
+
         {/* ------------------------------------------------------------------- */}
         {/* LAYOUT 2: COMPACT RATE SHEET (A4 TABLE WITH THUMBNAIL IMAGES) */}
         {/* ------------------------------------------------------------------- */}
@@ -975,7 +1005,7 @@ export default function WholesaleCatalogPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredItems.map((item) => {
+                  displayedItems.map((item) => {
                     const effPrice = getAdjustedPrice(item.wholesalePrice);
                     return (
                       <tr
@@ -1006,6 +1036,8 @@ export default function WholesaleCatalogPage() {
                                 <img
                                   src={item.imageUrl}
                                   alt={item.name}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="w-full h-full object-cover"
                                   onError={(e) => {
                                     e.target.onerror = null;
@@ -1069,6 +1101,19 @@ export default function WholesaleCatalogPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Load More Button for Table Mode */}
+        {layoutMode === 'table' && displayedItems.length < filteredItems.length && (
+          <div className="py-4 text-center print:hidden">
+            <button
+              type="button"
+              onClick={() => setVisibleCount((prev) => prev + 40)}
+              className="px-6 py-2 rounded-xl bg-stone-900 hover:bg-stone-800 text-stone-200 text-xs font-semibold border border-stone-700 transition-colors cursor-pointer shadow-md"
+            >
+              Load More Rows ({displayedItems.length} of {filteredItems.length} shown)
+            </button>
           </div>
         )}
 
