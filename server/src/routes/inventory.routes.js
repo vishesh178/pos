@@ -25,13 +25,14 @@ router.get('/overview', optionalAuth, async (req, res) => {
     let totalValuationRetail = 0;
 
     for (const p of products) {
-      totalStockUnits += p.currentStock;
-      totalValuationCost += p.currentStock * p.purchasePrice;
-      totalValuationRetail += p.currentStock * p.sellingPrice;
+      const stock = Math.max(0, p.currentStock || 0);
+      totalStockUnits += stock;
+      totalValuationCost += stock * (p.purchasePrice || 0);
+      totalValuationRetail += stock * (p.sellingPrice || 0);
 
-      if (p.currentStock <= 0) {
+      if (stock <= 0) {
         outOfStockCount++;
-      } else if (p.currentStock <= p.minStock) {
+      } else if (stock <= p.minStock) {
         lowStockCount++;
       }
     }

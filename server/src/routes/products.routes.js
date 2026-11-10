@@ -414,7 +414,8 @@ router.post('/', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTORY'
       return res.status(400).json({ error: `Barcode '${barcode}' is already in use.` });
     }
 
-    const stockQty = currentStock !== undefined && currentStock !== '' ? parseFloat(currentStock) : 0.0;
+    const parsedStock = currentStock !== undefined && currentStock !== '' ? parseFloat(currentStock) : 0.0;
+    const stockQty = isNaN(parsedStock) ? 0.0 : Math.max(0, parsedStock);
     const isAdmin = req.user && req.user.role === 'ADMIN';
     const cost = (isAdmin && purchasePrice) ? parseFloat(purchasePrice) : 0.0;
     const price = sellingPrice ? parseFloat(sellingPrice) : 0.0;
@@ -536,7 +537,7 @@ router.put('/:id', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'INVENTOR
           mrp: mrp !== undefined ? parseFloat(mrp) : undefined,
           gstRate: gstRate !== undefined ? parseFloat(gstRate) : undefined,
           hsnCode: hsnCode !== undefined ? hsnCode.trim() : undefined,
-          currentStock: (req.body.currentStock !== undefined && req.body.currentStock !== '') ? parseFloat(req.body.currentStock) : undefined,
+          currentStock: (req.body.currentStock !== undefined && req.body.currentStock !== '') ? Math.max(0, parseFloat(req.body.currentStock) || 0) : undefined,
           minStock: (minStock !== undefined && minStock !== '') ? parseFloat(minStock) : undefined,
           unit: unit !== undefined ? unit.trim().toUpperCase() : undefined,
           supplierId: supplierId !== undefined ? supplierId : undefined,
@@ -676,7 +677,8 @@ router.post('/bulk-import', authenticateToken, requireRole(['ADMIN', 'MANAGER'])
           }
         }
 
-        const currentStock = (row.currentStock !== undefined && row.currentStock !== '') ? parseFloat(String(row.currentStock).replace(/,/g, '')) : 0.0;
+        const rawStock = (row.currentStock !== undefined && row.currentStock !== '') ? parseFloat(String(row.currentStock).replace(/,/g, '')) : 0.0;
+        const currentStock = isNaN(rawStock) ? 0.0 : Math.max(0, rawStock);
         const isAdmin = req.user && req.user.role === 'ADMIN';
         const purchasePrice = (isAdmin && row.purchasePrice) ? parseFloat(row.purchasePrice) : 0.0;
         const sellingPrice = row.sellingPrice ? parseFloat(row.sellingPrice) : 0.0;
