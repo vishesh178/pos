@@ -43,7 +43,10 @@ function SidebarContent({ onCloseMobile, handleLogout, user, hasPermission, navI
           {/* Close button for mobile drawer */}
           {onCloseMobile && (
             <button
+              type="button"
               onClick={onCloseMobile}
+              aria-label="Close navigation menu"
+              title="Close navigation menu"
               className="md:hidden p-1.5 rounded-lg text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition-colors"
             >
               <X className="w-5 h-5" />

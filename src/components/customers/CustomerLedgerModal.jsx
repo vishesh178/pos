@@ -262,7 +262,10 @@ export default function CustomerLedgerModal({ isOpen, onClose, customerId, onBal
             </button>
 
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close customer ledger dialog"
+              title="Close"
               className="p-1.5 sm:p-2 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-xl transition-colors cursor-pointer ml-1"
             >
               <X className="w-5 h-5" />

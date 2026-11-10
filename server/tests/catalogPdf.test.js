@@ -100,3 +100,4 @@ test('Catalog PDF - Multi-Column A4 Generation (2 and 3 cols)', async () => {
   assert.ok(buf3Col.length > 2000);
   assert.strictEqual(buf3Col.subarray(0, 4).toString(), '%PDF');
 });
+

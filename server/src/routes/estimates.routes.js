@@ -3,6 +3,7 @@ const router = express.Router();
 const prisma = require('../prisma');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { calculateInvoiceTotals, getZohoStateCode } = require('../utils/gst');
+const { generateEstimatePdf } = require('../utils/estimatePdf');
 
 // GET /api/estimates - List estimates with filter & search
 router.get('/', authenticateToken, async (req, res) => {
@@ -637,6 +638,44 @@ router.get('/:id/export/excel', authenticateToken, async (req, res) => {
   } catch (err) {
     console.error('Estimate Excel export error:', err);
     res.status(500).json({ error: 'Failed to export estimate to Excel: ' + err.message });
+  }
+});
+
+// GET /api/estimates/:id/export/pdf - Export single estimate as formatted PDF document
+router.get('/:id/export/pdf', authenticateToken, async (req, res) => {
+  try {
+    const estimate = await prisma.estimate.findUnique({
+      where: { id: req.params.id },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+        customer: true,
+      },
+    });
+
+    if (!estimate) {
+      return res.status(404).json({ error: 'Estimate not found' });
+    }
+
+    const business = (await prisma.businessProfile.findFirst()) || {
+      businessName: 'Curated Art',
+      phone: '+91 98765 43210',
+      email: 'contact@curatedart.in',
+      gstin: '24AAAAA0000A1Z5',
+      address: 'Showroom #104, Design District, SG Highway, Ahmedabad, Gujarat - 380054',
+    };
+
+    const pdfBuffer = await generateEstimatePdf(estimate, business);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Estimate_${estimate.estimateNumber}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.end(pdfBuffer);
+  } catch (err) {
+    console.error('Estimate PDF export error:', err);
+    res.status(500).json({ error: 'Failed to export estimate to PDF: ' + err.message });
   }
 });
 

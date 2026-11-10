@@ -483,6 +483,8 @@ export default function CatalogPdfModal({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close catalog preview"
+              title="Close"
               className="p-2 rounded-xl text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition-colors cursor-pointer ml-1"
             >
               <X className="w-5 h-5" />

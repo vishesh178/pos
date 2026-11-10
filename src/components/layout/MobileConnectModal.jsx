@@ -66,7 +66,10 @@ export default function MobileConnectModal({ isOpen, onClose }) {
       >
         {/* Close Button */}
         <button
+          type="button"
           onClick={onClose}
+          aria-label="Close mobile connection modal"
+          title="Close"
           className="absolute top-5 right-5 p-2 rounded-xl text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition-colors"
         >
           <X className="w-5 h-5" />

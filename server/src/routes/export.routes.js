@@ -41,7 +41,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       prisma.supplier.findMany({ orderBy: { name: 'asc' } }),
       prisma.invoice.findMany({ orderBy: { createdAt: 'desc' } }),
       prisma.purchaseBill.findMany({ include: { supplier: true }, orderBy: { billDate: 'desc' } }),
-      prisma.stockMovement.findMany({ include: { product: true }, orderBy: { createdAt: 'desc' }, take: 10000 }),
+      prisma.stockMovement.findMany({ where: { product: { is: {} } }, include: { product: true }, orderBy: { createdAt: 'desc' }, take: 10000 }),
       prisma.expense.findMany({ orderBy: { expenseDate: 'desc' } }),
       prisma.pricebook.findMany({ orderBy: { name: 'asc' } }),
       prisma.generalAccount.findMany({ orderBy: { name: 'asc' } }),
@@ -555,6 +555,7 @@ router.get('/inventory', authenticateToken, requireRole(['ADMIN', 'MANAGER']), a
   try {
     const format = req.query.format === 'csv' ? 'csv' : 'xlsx';
     const movements = await prisma.stockMovement.findMany({
+      where: { product: { is: {} } },
       include: { product: true },
       orderBy: { createdAt: 'desc' },
       take: 10000,

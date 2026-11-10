@@ -129,7 +129,10 @@ export default function BarcodePrintModal({ isOpen, onClose, product, products =
           </div>
 
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close barcode print dialog"
+            title="Close"
             className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />

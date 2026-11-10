@@ -486,7 +486,12 @@ export default function EstimateModal({
           alert('Could not save PDF: ' + (res?.error || 'Unknown error'));
         }
       } else {
-        window.print();
+        const url = `/api/estimates/${currentEstimate.id}/export/pdf`;
+        const fallbackFilename = `Estimate_${currentEstimate.estimateNumber || 'QUOTATION'}.pdf`;
+        const success = await downloadExportFile(url, fallbackFilename, token);
+        if (!success) {
+          window.print();
+        }
       }
     } catch (err) {
       console.error('PDF Download Error:', err);
@@ -704,7 +709,10 @@ export default function EstimateModal({
             </div>
 
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close estimate dialog"
+              title="Close"
               className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-lg transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />

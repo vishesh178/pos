@@ -602,7 +602,10 @@ export default function CustomerImportModal({ isOpen, onClose, onImported }) {
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Close import dialog"
+            title="Close"
             className="p-1.5 text-stone-400 hover:text-stone-200 rounded-lg cursor-pointer transition-colors"
           >
             <X className="w-5 h-5" />

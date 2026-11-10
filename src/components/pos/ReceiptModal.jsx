@@ -92,8 +92,11 @@ export default function ReceiptModal({ isOpen, onClose, invoice, businessProfile
             </div>
 
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-lg"
+              aria-label="Close invoice receipt dialog"
+              title="Close"
+              className="p-1.5 text-stone-400 hover:text-stone-200 hover:bg-stone-800 rounded-lg cursor-pointer transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
