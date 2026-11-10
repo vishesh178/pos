@@ -108,9 +108,20 @@ export default function CatalogPdfModal({
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    @media print {
+      .catalog-download-topbar { display: none !important; }
+    }
   </style>
 </head>
 <body>
+  <div class="catalog-download-topbar" style="position:sticky;top:0;left:0;right:0;z-index:99999;background:#1c1917;color:#ffffff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-family:sans-serif;border-bottom:1px solid #44403c;">
+    <button onclick="if(window.history.length > 1){window.history.back();}else{window.close();}" style="background:#292524;color:#f5f5f4;border:1px solid #57534e;padding:6px 14px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">
+      &larr; Back to App
+    </button>
+    <button onclick="window.print()" style="background:#f59e0b;color:#0c0a09;border:none;padding:6px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">
+      &#128424; Print / Save as PDF
+    </button>
+  </div>
   ${slideCards}
 </body>
 </html>`;
@@ -193,9 +204,20 @@ export default function CatalogPdfModal({
       font-size: 10px;
       color: #78716c;
     }
+    @media print {
+      .catalog-download-topbar { display: none !important; }
+    }
   </style>
 </head>
 <body>
+  <div class="catalog-download-topbar" style="position:sticky;top:0;left:0;right:0;z-index:99999;background:#1c1917;color:#ffffff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-family:sans-serif;border-bottom:1px solid #44403c;">
+    <button onclick="if(window.history.length > 1){window.history.back();}else{window.close();}" style="background:#292524;color:#f5f5f4;border:1px solid #57534e;padding:6px 14px;border-radius:8px;font-weight:600;font-size:13px;cursor:pointer;">
+      &larr; Back to App
+    </button>
+    <button onclick="window.print()" style="background:#f59e0b;color:#0c0a09;border:none;padding:6px 16px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;">
+      &#128424; Print / Save as PDF
+    </button>
+  </div>
   ${
     showBusinessHeader
       ? `
@@ -223,52 +245,9 @@ export default function CatalogPdfModal({
 </html>`;
   };
 
-  // ISOLATED PRINTING via hidden iframe on desktop or new tab on mobile
+  // IN-PAGE DIRECT PRINTING (Opens native OS Print / Save as PDF sheet directly over the modal without breaking PWA navigation)
   const handlePrint = () => {
-    const cleanHtml = generateCleanCatalogHtml();
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
-
-    if (isMobile) {
-      // Mobile Safari / Chrome cannot trigger print from 0-size hidden iframes
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(cleanHtml);
-        printWindow.document.close();
-        setTimeout(() => {
-          try {
-            printWindow.focus();
-            printWindow.print();
-          } catch (e) {
-            console.error('Mobile print trigger error:', e);
-          }
-        }, 500);
-        return;
-      }
-    }
-
-    let iframe = document.getElementById('catalog-print-isolated-iframe');
-    if (!iframe) {
-      iframe = document.createElement('iframe');
-      iframe.id = 'catalog-print-isolated-iframe';
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      document.body.appendChild(iframe);
-    }
-
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(cleanHtml);
-    doc.close();
-
-    iframe.contentWindow.focus();
-    setTimeout(() => {
-      iframe.contentWindow.print();
-    }, 400);
+    window.print();
   };
 
   const handleDownloadHtml = () => {
@@ -289,6 +268,61 @@ export default function CatalogPdfModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-3 sm:p-6 overflow-y-auto">
+      {/* Print-only CSS specifically for the clean PDF catalog */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #catalog-pdf-print-zone, #catalog-pdf-print-zone * {
+            visibility: visible !important;
+          }
+          #catalog-pdf-print-zone {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: ${gridCols === 1 ? '0' : '10mm 8mm'} !important;
+            background: #ffffff !important;
+            color: #1c1917 !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          @page {
+            size: ${gridCols === 1 ? '595pt 646pt' : 'A4 portrait'};
+            margin: 0;
+          }
+          .catalog-slide-item {
+            page-break-after: always !important;
+            break-after: page !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            background: #ffffff !important;
+            margin: 0 !important;
+          }
+          .catalog-grid-item {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            background: #ffffff !important;
+            color: #1c1917 !important;
+            border: 1px solid #e7e5e4 !important;
+          }
+          .print-hidden-zone {
+            display: none !important;
+          }
+        }
+      `}</style>
       {/* Main Modal Window */}
       <div className="bg-stone-900 border border-stone-800 rounded-3xl w-full max-w-5xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Modal Controls Header */}
@@ -444,7 +478,7 @@ export default function CatalogPdfModal({
               </div>
             ) : gridCols === 1 ? (
               <div className="flex flex-col items-center gap-8 max-w-lg mx-auto py-2">
-                <div className="w-full text-center text-xs text-amber-400 font-medium pb-2 border-b border-stone-800">
+                <div className="print-hidden-zone w-full text-center text-xs text-amber-400 font-medium pb-2 border-b border-stone-800">
                   📱 Mobile Slide Deck Lookbook (595 × 646 pt — 1 product per slide, matching reference PDF)
                 </div>
                 {products.map((item) => {
@@ -458,7 +492,7 @@ export default function CatalogPdfModal({
                   return (
                     <div
                       key={item.id}
-                      className="catalog-card-optimized w-full bg-white text-stone-900 rounded-2xl overflow-hidden shadow-md border border-stone-700 flex flex-col"
+                      className="catalog-slide-item catalog-card-optimized w-full bg-white text-stone-900 rounded-2xl overflow-hidden shadow-md border border-stone-700 flex flex-col"
                     >
                       <div className="w-full aspect-square bg-stone-100 flex items-center justify-center overflow-hidden">
                         {item.imageUrl ? (
@@ -507,7 +541,7 @@ export default function CatalogPdfModal({
                   return (
                     <div
                       key={item.id}
-                      className="catalog-card-optimized bg-stone-950/70 border border-stone-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm"
+                      className="catalog-grid-item catalog-card-optimized bg-stone-950/70 border border-stone-800 rounded-2xl p-4 flex flex-col justify-between shadow-sm"
                     >
                       <div>
                         {/* 1. PRODUCT IMAGE */}

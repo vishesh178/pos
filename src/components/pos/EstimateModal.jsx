@@ -468,55 +468,10 @@ export default function EstimateModal({
 </html>`;
   };
 
-  const printIsolatedIframe = () => {
-    const cleanHtml = generateCleanEstimateHtml(layout);
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
-
-    if (isMobile) {
-      // Mobile Safari / Chrome cannot trigger print from 0-size hidden iframes
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.open();
-        printWindow.document.write(cleanHtml);
-        printWindow.document.close();
-        setTimeout(() => {
-          try {
-            printWindow.focus();
-            printWindow.print();
-          } catch (e) {
-            console.error('Mobile print trigger error:', e);
-          }
-        }, 500);
-        return;
-      }
-    }
-
-    let iframe = document.getElementById('estimate-print-isolated-iframe');
-    if (!iframe) {
-      iframe = document.createElement('iframe');
-      iframe.id = 'estimate-print-isolated-iframe';
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      document.body.appendChild(iframe);
-    }
-
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(cleanHtml);
-    doc.close();
-
-    iframe.contentWindow.focus();
-    setTimeout(() => {
-      iframe.contentWindow.print();
-    }, 400);
-  };
-
+  // Direct in-page print using the scoped #printable-estimate container
+  // Prevents opening blank tabs or breaking iOS PWA standalone navigation
   const handlePrint = () => {
-    printIsolatedIframe();
+    window.print();
   };
 
   const handleDownloadPDF = async () => {
@@ -531,7 +486,7 @@ export default function EstimateModal({
           alert('Could not save PDF: ' + (res?.error || 'Unknown error'));
         }
       } else {
-        printIsolatedIframe();
+        window.print();
       }
     } catch (err) {
       console.error('PDF Download Error:', err);
