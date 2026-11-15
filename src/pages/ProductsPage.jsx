@@ -369,11 +369,11 @@ export default function ProductsPage() {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
           <select
             value={selectedCategory}
             onChange={(e) => handleCategoryChange(e.target.value)}
-            className="flex-1 sm:flex-none px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-stone-300 text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
+            className="col-span-2 sm:col-span-1 px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-stone-300 text-xs focus:outline-none focus:border-amber-500 cursor-pointer"
           >
             <option value="all">All Categories ({categories.length})</option>
             {categories.map((c) => (
@@ -389,7 +389,7 @@ export default function ProductsPage() {
               setHasImageFilter(e.target.value);
               setPage(1);
             }}
-            className={`px-3 py-2 bg-stone-950 border rounded-xl text-xs focus:outline-none focus:border-amber-500 cursor-pointer shrink-0 font-medium ${
+            className={`px-3 py-2 bg-stone-950 border rounded-xl text-xs focus:outline-none focus:border-amber-500 cursor-pointer font-medium ${
               hasImageFilter !== 'all' ? 'border-amber-500 text-amber-300' : 'border-stone-800 text-stone-300'
             }`}
             title="Filter products by photo presence"
@@ -402,13 +402,14 @@ export default function ProductsPage() {
           <button
             type="button"
             onClick={handleToggleLowStock}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer shrink-0 ${
+            className={`flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all border cursor-pointer shrink-0 ${
               lowStockOnly
-                ? 'bg-rose-950/80 border-rose-800 text-rose-300'
+                ? 'bg-rose-950/80 border-rose-800 text-rose-300 shadow-sm'
                 : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
             }`}
+            title="Filter by low stock"
           >
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
             <span className="whitespace-nowrap">Low Stock</span>
           </button>
         </div>
