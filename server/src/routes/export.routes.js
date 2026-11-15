@@ -86,6 +86,8 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Min Stock Alert': p.minStock,
       'Unit': p.unit,
       'Status': p.status,
+      'Photo Available': (p.imageUrl && p.imageUrl.trim() !== '') ? 'YES' : 'NO',
+      'Photo Link': p.imageUrl || '',
       'Supplier': p.supplier?.name || '',
     }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(productRows), 'Products_Catalog');
@@ -437,6 +439,8 @@ router.get('/products', authenticateToken, requireRole(['ADMIN', 'MANAGER']), as
       'Min Stock': p.minStock,
       'Unit': p.unit,
       'Status': p.status,
+      'Photo Available': (p.imageUrl && p.imageUrl.trim() !== '') ? 'YES' : 'NO',
+      'Photo Link': p.imageUrl || '',
       'Supplier': p.supplier?.name || '',
     }));
 

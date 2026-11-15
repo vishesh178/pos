@@ -201,3 +201,28 @@ test('Wholesale Catalog: filters correctly by targeted product IDs', async () =>
     assert.equal(res.json.items[0].id, targetId);
   }
 });
+
+test('Products route: filters correctly by hasImage parameter', async () => {
+  const productsRoutes = require('../src/routes/products.routes');
+  const resWith = await invokeRoute(productsRoutes, {
+    method: 'GET',
+    path: '/',
+    query: { hasImage: 'true', limit: '10' },
+  });
+  assert.equal(resWith.status, 200);
+  assert.ok(Array.isArray(resWith.json.products));
+  for (const p of resWith.json.products) {
+    assert.ok(p.imageUrl && p.imageUrl.trim() !== '');
+  }
+
+  const resWithout = await invokeRoute(productsRoutes, {
+    method: 'GET',
+    path: '/',
+    query: { hasImage: 'false', limit: '10' },
+  });
+  assert.equal(resWithout.status, 200);
+  assert.ok(Array.isArray(resWithout.json.products));
+  for (const p of resWithout.json.products) {
+    assert.ok(!p.imageUrl || p.imageUrl.trim() === '');
+  }
+});

@@ -40,6 +40,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [hasImageFilter, setHasImageFilter] = useState('all'); // 'all', 'true' (with photo), 'false' (missing photo)
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1 });
@@ -140,6 +141,7 @@ export default function ProductsPage() {
       if (search.trim()) params.append('search', search.trim());
       if (selectedCategory !== 'all') params.append('categoryId', selectedCategory);
       if (lowStockOnly) params.append('lowStock', 'true');
+      if (hasImageFilter !== 'all') params.append('hasImage', hasImageFilter);
       params.append('page', String(page));
       params.append('limit', String(pageSize));
 
@@ -174,7 +176,7 @@ export default function ProductsPage() {
       fetchProducts();
     }, 200);
     return () => clearTimeout(delayDebounce);
-  }, [search, selectedCategory, lowStockOnly, page, pageSize]);
+  }, [search, selectedCategory, lowStockOnly, hasImageFilter, page, pageSize]);
 
   // Reset page to 1 when search or category filter changes
   const handleSearchChange = (val) => {
@@ -381,6 +383,22 @@ export default function ProductsPage() {
             ))}
           </select>
 
+          <select
+            value={hasImageFilter}
+            onChange={(e) => {
+              setHasImageFilter(e.target.value);
+              setPage(1);
+            }}
+            className={`px-3 py-2 bg-stone-950 border rounded-xl text-xs focus:outline-none focus:border-amber-500 cursor-pointer shrink-0 font-medium ${
+              hasImageFilter !== 'all' ? 'border-amber-500 text-amber-300' : 'border-stone-800 text-stone-300'
+            }`}
+            title="Filter products by photo presence"
+          >
+            <option value="all">Photo: All</option>
+            <option value="true">📷 With Photo</option>
+            <option value="false">⚠️ Missing Photo</option>
+          </select>
+
           <button
             type="button"
             onClick={handleToggleLowStock}
@@ -476,6 +494,15 @@ export default function ProductsPage() {
                         {p.category?.name || 'Home Décor'}
                       </span>
                       <span className="text-[10px] text-stone-500">HSN: {p.hsnCode}</span>
+                      {p.imageUrl ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-medium">
+                          Photo ✓
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700 font-medium">
+                          No Photo
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-[11px] font-mono text-stone-400">
                       <span>{p.sku}</span>
@@ -666,6 +693,15 @@ export default function ProductsPage() {
                                 {p.category?.name || 'Home Décor'}
                               </span>
                               <span className="text-[10px] text-stone-400">HSN: {p.hsnCode}</span>
+                              {p.imageUrl ? (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 font-medium">
+                                  Photo ✓
+                                </span>
+                              ) : (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700 font-medium">
+                                  No Photo
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>

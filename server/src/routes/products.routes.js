@@ -182,21 +182,39 @@ router.post('/upload-image', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/products - List products with optional search, category, low stock, and pagination
+// GET /api/products - List products with optional search, category, low stock, photo presence, and pagination
 router.get('/', optionalAuth, async (req, res) => {
   try {
-    const { search, categoryId, status, lowStock, page, limit } = req.query;
+    const { search, categoryId, status, lowStock, hasImage, page, limit } = req.query;
     const where = {};
+    const andClauses = [];
 
     if (search && search.trim()) {
       const q = search.trim();
-      where.OR = [
-        { name: { contains: q } },
-        { sku: { contains: q } },
-        { barcode: { contains: q } },
-        { hsnCode: { contains: q } },
-        { brand: { contains: q } },
-      ];
+      andClauses.push({
+        OR: [
+          { name: { contains: q } },
+          { sku: { contains: q } },
+          { barcode: { contains: q } },
+          { hsnCode: { contains: q } },
+          { brand: { contains: q } },
+        ],
+      });
+    }
+
+    if (hasImage === 'true') {
+      andClauses.push({ imageUrl: { not: null, gt: '' } });
+    } else if (hasImage === 'false') {
+      andClauses.push({
+        OR: [
+          { imageUrl: null },
+          { imageUrl: '' },
+        ],
+      });
+    }
+
+    if (andClauses.length > 0) {
+      where.AND = andClauses;
     }
 
     if (categoryId && categoryId !== 'all') {

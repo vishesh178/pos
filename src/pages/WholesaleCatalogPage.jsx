@@ -67,6 +67,7 @@ export default function WholesaleCatalogPage() {
   // Selected items state for custom targeted catalogs
   const [selectedItemIds, setSelectedItemIds] = useState(new Set());
   const [onlySelected, setOnlySelected] = useState(false);
+  const [imageFilter, setImageFilter] = useState('all'); // 'all', 'with_image', 'without_image'
   const [isCatalogPdfModalOpen, setIsCatalogPdfModalOpen] = useState(false);
 
   // View layout: 'cards' (Lookbook), 'table' (Price List Sheet), 'whatsapp' (Quick Text)
@@ -190,11 +191,13 @@ export default function WholesaleCatalogPage() {
     }
   };
 
-  // Filtered & computed items (respects onlySelected toggle)
+  // Filtered & computed items (respects onlySelected toggle and photo filter)
   const filteredItems = useMemo(() => {
     if (!catalogData?.items) return [];
     return catalogData.items.filter((item) => {
       if (onlySelected && !selectedItemIds.has(item.id)) return false;
+      if (imageFilter === 'with_image' && !item.imageUrl) return false;
+      if (imageFilter === 'without_image' && item.imageUrl) return false;
       const matchesCat =
         selectedCategory === 'all' || item.categoryName === selectedCategory;
       const q = searchQuery.toLowerCase().trim();
@@ -205,7 +208,7 @@ export default function WholesaleCatalogPage() {
         item.brand.toLowerCase().includes(q);
       return matchesCat && matchesSearch;
     });
-  }, [catalogData, selectedCategory, searchQuery, onlySelected, selectedItemIds]);
+  }, [catalogData, selectedCategory, searchQuery, onlySelected, selectedItemIds, imageFilter]);
 
   // Sliced items for responsive DOM rendering & smooth mobile scrolling
   const displayedItems = useMemo(() => {
@@ -691,6 +694,21 @@ export default function WholesaleCatalogPage() {
             </div>
 
             <div className="flex items-center gap-2">
+              <span className="text-stone-400">Photo:</span>
+              <select
+                value={imageFilter}
+                onChange={(e) => setImageFilter(e.target.value)}
+                className={`border rounded-lg px-2.5 py-1.5 font-medium focus:outline-none focus:border-amber-500 ${
+                  imageFilter !== 'all' ? 'bg-amber-950/60 border-amber-500 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-200'
+                }`}
+              >
+                <option value="all">All Items</option>
+                <option value="with_image">📷 With Photo Only</option>
+                <option value="without_image">⚠️ Missing Photo Only</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
               <span className="text-stone-400">Min Available Stock:</span>
               <select
                 value={minStock}
@@ -876,8 +894,11 @@ export default function WholesaleCatalogPage() {
                           ) : (
                             <div className="text-center p-3">
                               <Package className="w-8 h-8 text-amber-500/50 mx-auto mb-1 print:text-stone-400" />
-                              <span className="text-[10px] uppercase tracking-widest text-stone-400 font-serif">
+                              <span className="text-[10px] uppercase tracking-widest text-stone-400 font-serif block">
                                 {item.categoryName}
+                              </span>
+                              <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700 font-medium">
+                                No Photo
                               </span>
                             </div>
                           )}
