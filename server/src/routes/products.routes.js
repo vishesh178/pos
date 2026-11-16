@@ -307,7 +307,20 @@ router.get('/wholesale-catalog', async (req, res) => {
 
     const items = await prisma.product.findMany({
       where,
-      include: {
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        barcode: true,
+        brand: true,
+        description: true,
+        imageUrl: true,
+        sellingPrice: true,
+        mrp: true,
+        gstRate: true,
+        hsnCode: true,
+        currentStock: true,
+        unit: true,
         category: { select: { id: true, name: true } },
       },
       orderBy: [
