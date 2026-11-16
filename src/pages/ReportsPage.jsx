@@ -22,6 +22,15 @@ import {
 import { useAuth } from '../context/AuthContext';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import { downloadExportFile } from '../utils/exportDownloader';
+import {
+  exportSalesReport,
+  exportProfitabilityReport,
+  exportCategoryReport,
+  exportCustomerReceivablesReport,
+  exportSupplierPayablesReport,
+  exportGstr1HsnReport,
+  exportInvoicesRegisterReport,
+} from '../utils/reportExporter';
 
 // Native browser CSV export utility with UTF-8 BOM for flawless Excel opening
 function exportToCsv(filename, rows) {
