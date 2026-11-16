@@ -30,9 +30,10 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(auditMiddleware);
 
-// Static uploads directory (product images, receipts) with 7-day browser caching
+// Static uploads directory (product images, receipts) with 30-day immutable browser caching
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-  maxAge: '7d',
+  maxAge: '30d',
+  immutable: true,
 }));
 
 // Health check endpoint

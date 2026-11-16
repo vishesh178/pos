@@ -1,9 +1,20 @@
+function canUseWebp() {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    return canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+  } catch (e) {
+    return false;
+  }
+}
+
 /**
  * Compresses an image file from the device or camera using HTML5 Canvas.
- * Scales to a max dimension (default 1200px) and outputs a lightweight JPEG (~100-200KB)
- * for instant, lag-free uploads over showroom local Wi-Fi.
+ * Automatically exports modern lightweight WebP (with JPEG fallback) scaled to max 1000px (~30-60KB)
+ * for instant, lag-free uploads and smooth 60fps mobile scrolling.
  */
-export function compressImageFile(file, maxWidth = 1200, quality = 0.82) {
+export function compressImageFile(file, maxWidth = 1000, quality = 0.80) {
   return new Promise((resolve, reject) => {
     if (!file || !file.type || !file.type.startsWith('image/')) {
       return reject(new Error('Selected file is not an image'));
@@ -34,7 +45,8 @@ export function compressImageFile(file, maxWidth = 1200, quality = 0.82) {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        const format = canUseWebp() ? 'image/webp' : 'image/jpeg';
+        const dataUrl = canvas.toDataURL(format, quality);
         resolve(dataUrl);
       };
       img.src = e.target.result;
