@@ -80,6 +80,11 @@ model Product {
   salesReturnItems   SalesReturnItem[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+
+  @@index([status, currentStock])
+  @@index([categoryId])
+  @@index([createdAt])
+  @@index([name])
 }
 
 model Customer {
@@ -106,6 +111,11 @@ model Customer {
   payments        Payment[]
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
+
+  @@index([mobile])
+  @@index([name])
+  @@index([customerType])
+  @@index([createdAt])
 }
 
 model Supplier {
@@ -129,6 +139,9 @@ model Supplier {
   purchaseBills  PurchaseBill[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
+
+  @@index([mobile])
+  @@index([name])
 }
 
 model Invoice {
@@ -163,6 +176,10 @@ model Invoice {
   salesReturns   SalesReturn[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model InvoiceItem {
@@ -184,6 +201,9 @@ model InvoiceItem {
   sgstAmount     Float    @default(0.0)
   igstAmount     Float    @default(0.0)
   totalAmount    Float
+
+  @@index([invoiceId])
+  @@index([productId])
 }
 
 model Payment {
@@ -200,6 +220,10 @@ model Payment {
   referenceNumber String?
   notes           String?
   createdAt       DateTime      @default(now())
+
+  @@index([customerId])
+  @@index([invoiceId])
+  @@index([createdAt])
 }
 
 model SalesReturn {
@@ -276,6 +300,9 @@ model PurchaseBill {
   payments           Payment[]
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
+
+  @@index([supplierId])
+  @@index([billDate])
 }
 
 model PurchaseBillItem {
@@ -288,6 +315,9 @@ model PurchaseBillItem {
   unitCost       Float
   taxRate        Float
   totalAmount    Float
+
+  @@index([purchaseBillId])
+  @@index([productId])
 }
 
 model StockMovement {
@@ -303,6 +333,10 @@ model StockMovement {
   notes         String?
   createdBy     String?
   createdAt     DateTime @default(now())
+
+  @@index([productId])
+  @@index([createdAt])
+  @@index([type])
 }
 
 model Expense {
@@ -319,6 +353,9 @@ model Expense {
   createdBy      String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([category])
+  @@index([expenseDate])
 }
 
 model SyncJob {
@@ -348,6 +385,9 @@ model AuditLog {
   details    String?
   ipAddress  String?
   createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entityType])
 }
 
 model Estimate {
@@ -378,6 +418,10 @@ model Estimate {
   items              EstimateItem[]
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 model EstimateItem {
@@ -399,6 +443,9 @@ model EstimateItem {
   sgstAmount     Float    @default(0.0)
   igstAmount     Float    @default(0.0)
   totalAmount    Float
+
+  @@index([estimateId])
+  @@index([productId])
 }
 
 model Pricebook {
