@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { calculateInvoiceTotals } from '../utils/clientGst';
+import { cachedFetch } from '../utils/cachedFetch';
 
 const POSContext = createContext(null);
 
@@ -21,10 +22,9 @@ export function POSProvider({ children }) {
   const [pricebooks, setPricebooks] = useState([]);
   const [activePricebook, setActivePricebook] = useState(null);
 
-  // Fetch business profile and pricebook tiers on mount
+  // Fetch business profile and pricebook tiers on mount (instant from cache)
   useEffect(() => {
-    fetch('/api/business/profile')
-      .then((res) => res.json())
+    cachedFetch('/api/business/profile')
       .then((data) => setBusinessProfile(data))
       .catch((err) => console.error('Failed to fetch business profile in POS:', err));
 
@@ -33,8 +33,7 @@ export function POSProvider({ children }) {
     };
     window.addEventListener('business-profile-updated', handleProfileUpdate);
 
-    fetch('/api/pricebooks')
-      .then((res) => res.json())
+    cachedFetch('/api/pricebooks')
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setPricebooks(data);

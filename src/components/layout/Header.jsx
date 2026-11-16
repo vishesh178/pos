@@ -13,6 +13,7 @@ import {
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import MobileConnectModal from './MobileConnectModal';
+import { cachedFetch } from '../../utils/cachedFetch';
 
 export default function Header({ onOpenMobileMenu }) {
   const location = useLocation();
@@ -30,8 +31,7 @@ export default function Header({ onOpenMobileMenu }) {
 
   useEffect(() => {
     const fetchProfile = () => {
-      fetch('/api/business/profile')
-        .then((res) => res.json())
+      cachedFetch('/api/business/profile')
         .then((data) => setBusinessProfile(data))
         .catch((err) => console.error('Failed to fetch showroom profile in header:', err));
     };

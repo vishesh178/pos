@@ -33,6 +33,7 @@ import { useAuth } from '../context/AuthContext';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import EstimateModal from '../components/pos/EstimateModal';
 import BarcodeScannerModal from '../components/pos/BarcodeScannerModal';
+import { cachedFetch } from '../utils/cachedFetch';
 
 const INDIAN_STATES = [
   { name: 'Gujarat', code: '24', isIntra: true },
@@ -238,10 +239,9 @@ export default function POSPage() {
 
   const searchInputRef = useRef(null);
 
-  // Load categories and initial products
+  // Load categories (cached) and initial products
   useEffect(() => {
-    fetch('/api/products/categories')
-      .then((r) => r.json())
+    cachedFetch('/api/products/categories')
       .then((cats) => setCategories(Array.isArray(cats) ? cats : []))
       .catch((e) => console.error('Failed to load categories:', e));
 

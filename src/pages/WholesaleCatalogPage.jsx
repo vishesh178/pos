@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import CatalogPdfModal from '../components/products/CatalogPdfModal';
+import { cachedFetch } from '../utils/cachedFetch';
 
 // Native browser CSV export utility
 function exportToCsv(filename, rows) {
@@ -117,9 +118,8 @@ export default function WholesaleCatalogPage() {
       const data = await res.json();
       setCatalogData(data);
 
-      const catRes = await fetch('/api/products/categories');
-      const catData = await catRes.json();
-      setCategories(catData);
+      const catData = await cachedFetch('/api/products/categories');
+      setCategories(Array.isArray(catData) ? catData : []);
 
       // Initialize selected items from URL query params or sessionStorage
       if (urlIds) {

@@ -27,6 +27,7 @@ import ImportModal from '../components/products/ImportModal';
 import CatalogPdfModal from '../components/products/CatalogPdfModal';
 import { compressImageFile } from '../utils/imageCompressor';
 import { downloadExportFile } from '../utils/exportDownloader';
+import { cachedFetch } from '../utils/cachedFetch';
 
 export default function ProductsPage() {
   const navigate = useNavigate();
@@ -126,8 +127,7 @@ export default function ProductsPage() {
 
   const fetchCategories = async () => {
     try {
-      const res = await fetch('/api/products/categories');
-      const data = await res.json();
+      const data = await cachedFetch('/api/products/categories');
       setCategories(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch categories:', err);

@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { downloadExportFile } from '../utils/exportDownloader';
+import { invalidateCache } from '../utils/cachedFetch';
 
 export default function SettingsPage() {
   const { token, hasPermission } = useAuth();
@@ -123,6 +124,7 @@ export default function SettingsPage() {
       if (!res.ok) throw new Error(data.error || 'Failed to update profile');
 
       // Notify header and all active components of the updated business profile
+      invalidateCache('/api/business/profile');
       window.dispatchEvent(new CustomEvent('business-profile-updated', { detail: data }));
 
       setMessage('Business profile and invoice preferences saved.');
