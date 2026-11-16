@@ -928,10 +928,10 @@ router.get('/export/csv', optionalAuth, async (req, res) => {
     ]);
 
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="curated_art_products.csv"');
-    res.send(csvContent);
+    const timestamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="Curated_Art_Products_${timestamp}.csv"`);
+    res.send('\uFEFF' + csvContent);
   } catch (err) {
     console.error('Export CSV error:', err);
     res.status(500).json({ error: 'Failed to export products.' });

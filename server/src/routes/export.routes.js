@@ -5,12 +5,33 @@ const { authenticateToken, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Helper: format worksheet with automatic column widths based on cell content
+function createFormattedSheet(rows) {
+  const ws = XLSX.utils.json_to_sheet(rows || []);
+  if (rows && rows.length > 0) {
+    const keys = Object.keys(rows[0]);
+    ws['!cols'] = keys.map((key) => {
+      let maxLen = key.length;
+      const sampleLimit = Math.min(rows.length, 150);
+      for (let i = 0; i < sampleLimit; i++) {
+        const val = rows[i][key];
+        if (val != null) {
+          const l = String(val).length;
+          if (l > maxLen) maxLen = l;
+        }
+      }
+      return { wch: Math.min(Math.max(maxLen + 3, 10), 60) };
+    });
+  }
+  return ws;
+}
+
 // Helper: send workbook as Excel or CSV
 function sendSpreadsheet(res, workbook, baseFilename, format = 'xlsx') {
   const timestamp = new Date().toISOString().slice(0, 10);
   if (format === 'csv') {
     const firstSheetName = workbook.SheetNames[0];
-    const csvContent = XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName]);
+    const csvContent = '\uFEFF' + XLSX.utils.sheet_to_csv(workbook.Sheets[firstSheetName]);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${baseFilename}_${timestamp}.csv"`);
     return res.send(csvContent);
@@ -69,7 +90,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Opening Balance (₹)': c.openingBalance || 0,
       'Created Date': c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-IN') : '',
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(customerRows), 'Customers');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(customerRows), 'Customers');
 
     // Sheet 2: Products
     const productRows = products.map((p) => ({
@@ -90,7 +111,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Photo Link': p.imageUrl || '',
       'Supplier': p.supplier?.name || '',
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(productRows), 'Products_Catalog');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(productRows), 'Products_Catalog');
 
     // Sheet 3: Suppliers
     const supplierRows = suppliers.map((s) => ({
@@ -109,7 +130,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Outstanding Balance (₹)': s.currentBalance || 0,
       'Opening Balance (₹)': s.openingBalance || 0,
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(supplierRows), 'Suppliers');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(supplierRows), 'Suppliers');
 
     // Sheet 4: Sales Invoices
     const invoiceRows = invoices.map((inv) => ({
@@ -133,7 +154,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Payment Method': inv.paymentMethod,
       'Status': inv.status,
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(invoiceRows), 'Sales_Invoices');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(invoiceRows), 'Sales_Invoices');
 
     // Sheet 5: Purchase Bills
     const purchaseRows = purchaseBills.map((pb) => ({
@@ -149,7 +170,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Payment Status': pb.paymentStatus,
       'Notes': pb.notes || '',
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(purchaseRows), 'Purchase_Bills');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(purchaseRows), 'Purchase_Bills');
 
     // Sheet 6: Stock Movements Ledger
     const stockRows = stockMovements.map((sm) => ({
@@ -163,7 +184,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Reference ID': sm.referenceId || '',
       'Notes': sm.notes || '',
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stockRows), 'Stock_Ledger');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(stockRows), 'Stock_Ledger');
 
     // Sheet 7: Expenses
     const expenseRows = expenses.map((e) => ({
@@ -176,7 +197,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Payment Method': e.paymentMethod,
       'Description': e.description || '',
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expenseRows), 'Expenses');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(expenseRows), 'Expenses');
 
     // Sheet 8: Pricebooks
     const pricebookRows = pricebooks.map((pb) => ({
@@ -187,7 +208,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Is Default': pb.isDefault ? 'YES' : 'NO',
       'Is Active': pb.isActive ? 'ACTIVE' : 'INACTIVE',
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(pricebookRows), 'Pricebooks');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(pricebookRows), 'Pricebooks');
 
     // Sheet 9: Chart of Accounts (General Ledgers)
     const ledgerRows = (generalAccounts || []).map((ga) => ({
@@ -206,7 +227,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       'Status': ga.isActive ? 'ACTIVE' : 'INACTIVE',
       'Notes': ga.notes || '',
     }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ledgerRows), 'Chart_of_Accounts');
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(ledgerRows), 'Chart_of_Accounts');
 
     req.logAudit?.('EXPORT_ALL_DATA', 'SYSTEM', null, {
       sheets: wb.SheetNames,
@@ -215,7 +236,7 @@ router.get('/all', authenticateToken, requireRole(['ADMIN', 'MANAGER']), async (
       totalInvoices: invoices.length,
     });
 
-    sendSpreadsheet(res, wb, 'curated_art_complete_business_data', 'xlsx');
+    sendSpreadsheet(res, wb, 'Curated_Art_Complete_Business_Data', 'xlsx');
   } catch (err) {
     console.error('Master export error:', err);
     res.status(500).json({ error: 'Failed to generate master data export: ' + err.message });
@@ -254,8 +275,8 @@ router.get('/customers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BI
       }));
 
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Customers');
-      return sendSpreadsheet(res, wb, 'customers_export', format);
+      XLSX.utils.book_append_sheet(wb, createFormattedSheet(rows), 'Customers');
+      return sendSpreadsheet(res, wb, 'Curated_Art_Customers_Export', format);
     }
 
     // Default: Full Categorized Account Master List matching Tally master layout
@@ -409,7 +430,7 @@ router.get('/customers', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BI
       format,
     });
 
-    sendSpreadsheet(res, wb, 'CURATED_ART-Account_List', format);
+    sendSpreadsheet(res, wb, 'Curated_Art_Master_Account_List', format);
   } catch (err) {
     console.error('Export customers error:', err);
     res.status(500).json({ error: 'Failed to export accounts: ' + err.message });
@@ -445,8 +466,8 @@ router.get('/products', authenticateToken, requireRole(['ADMIN', 'MANAGER']), as
     }));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Products');
-    sendSpreadsheet(res, wb, 'products_catalog_export', format);
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(rows), 'Products');
+    sendSpreadsheet(res, wb, 'Curated_Art_Products_Catalog_Export', format);
   } catch (err) {
     console.error('Export products error:', err);
     res.status(500).json({ error: 'Failed to export products: ' + err.message });
@@ -477,8 +498,8 @@ router.get('/suppliers', authenticateToken, requireRole(['ADMIN', 'MANAGER']), a
     }));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Suppliers');
-    sendSpreadsheet(res, wb, 'suppliers_export', format);
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(rows), 'Suppliers');
+    sendSpreadsheet(res, wb, 'Curated_Art_Suppliers_Export', format);
   } catch (err) {
     console.error('Export suppliers error:', err);
     res.status(500).json({ error: 'Failed to export suppliers: ' + err.message });
@@ -514,8 +535,8 @@ router.get('/invoices', authenticateToken, requireRole(['ADMIN', 'MANAGER', 'BIL
     }));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Sales_Invoices');
-    sendSpreadsheet(res, wb, 'sales_invoices_export', format);
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(rows), 'Sales_Invoices');
+    sendSpreadsheet(res, wb, 'Curated_Art_Sales_Invoices_Export', format);
   } catch (err) {
     console.error('Export invoices error:', err);
     res.status(500).json({ error: 'Failed to export invoices: ' + err.message });
@@ -546,8 +567,8 @@ router.get('/purchases', authenticateToken, requireRole(['ADMIN', 'MANAGER']), a
     }));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Purchase_Bills');
-    sendSpreadsheet(res, wb, 'purchase_bills_export', format);
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(rows), 'Purchase_Bills');
+    sendSpreadsheet(res, wb, 'Curated_Art_Purchase_Bills_Export', format);
   } catch (err) {
     console.error('Export purchases error:', err);
     res.status(500).json({ error: 'Failed to export purchases: ' + err.message });
@@ -578,8 +599,8 @@ router.get('/inventory', authenticateToken, requireRole(['ADMIN', 'MANAGER']), a
     }));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Stock_Ledger');
-    sendSpreadsheet(res, wb, 'stock_movement_ledger_export', format);
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(rows), 'Stock_Ledger');
+    sendSpreadsheet(res, wb, 'Curated_Art_Stock_Movement_Ledger_Export', format);
   } catch (err) {
     console.error('Export inventory error:', err);
     res.status(500).json({ error: 'Failed to export inventory: ' + err.message });
@@ -604,8 +625,8 @@ router.get('/expenses', authenticateToken, requireRole(['ADMIN', 'MANAGER']), as
     }));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Expenses');
-    sendSpreadsheet(res, wb, 'expenses_export', format);
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(rows), 'Expenses');
+    sendSpreadsheet(res, wb, 'Curated_Art_Expenses_Export', format);
   } catch (err) {
     console.error('Export expenses error:', err);
     res.status(500).json({ error: 'Failed to export expenses: ' + err.message });
@@ -636,8 +657,8 @@ router.get('/general-accounts', authenticateToken, requireRole(['ADMIN', 'MANAGE
     }));
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Chart_of_Accounts');
-    sendSpreadsheet(res, wb, 'chart_of_accounts_export', format);
+    XLSX.utils.book_append_sheet(wb, createFormattedSheet(rows), 'Chart_of_Accounts');
+    sendSpreadsheet(res, wb, 'Curated_Art_Chart_Of_Accounts_Export', format);
   } catch (err) {
     console.error('Export general accounts error:', err);
     res.status(500).json({ error: 'Failed to export general accounts: ' + err.message });

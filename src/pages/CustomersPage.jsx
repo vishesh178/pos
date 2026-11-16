@@ -301,7 +301,7 @@ export default function CustomersPage() {
                 setIsExporting(true);
                 await downloadExportFile(
                   '/api/export/customers?format=xlsx',
-                  'CURATED_ART-Account_List.xlsx',
+                  'Curated_Art_Master_Account_List.xlsx',
                   token
                 );
                 setIsExporting(false);
@@ -318,7 +318,7 @@ export default function CustomersPage() {
                 setIsExporting(true);
                 await downloadExportFile(
                   '/api/export/customers?format=csv',
-                  'CURATED_ART-Account_List.csv',
+                  'Curated_Art_Master_Account_List.csv',
                   token
                 );
                 setIsExporting(false);

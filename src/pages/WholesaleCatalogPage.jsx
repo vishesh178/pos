@@ -29,11 +29,11 @@ import { useAuth } from '../context/AuthContext';
 import CatalogPdfModal from '../components/products/CatalogPdfModal';
 import { cachedFetch } from '../utils/cachedFetch';
 
-// Native browser CSV export utility
+// Native browser CSV export utility with UTF-8 BOM for flawless Excel opening
 function exportToCsv(filename, rows) {
   if (!rows || !rows.length) return;
   const keys = Object.keys(rows[0]);
-  const header = keys.join(',');
+  const header = keys.map((k) => `"${String(k).replace(/"/g, '""')}"`).join(',');
   const lines = rows.map((row) =>
     keys
       .map((k) => {
@@ -43,7 +43,8 @@ function exportToCsv(filename, rows) {
       })
       .join(',')
   );
-  const csvContent = [header, ...lines].join('\n');
+  // Prepend UTF-8 BOM (\uFEFF) so Microsoft Excel opens currency symbols (₹) and text properly
+  const csvContent = '\uFEFF' + [header, ...lines].join('\r\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

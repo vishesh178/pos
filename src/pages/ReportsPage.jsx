@@ -23,11 +23,11 @@ import { useAuth } from '../context/AuthContext';
 import ReceiptModal from '../components/pos/ReceiptModal';
 import { downloadExportFile } from '../utils/exportDownloader';
 
-// Native browser CSV export utility (zero dependencies, instant & reliable)
+// Native browser CSV export utility with UTF-8 BOM for flawless Excel opening
 function exportToCsv(filename, rows) {
   if (!rows || !rows.length) return;
   const keys = Object.keys(rows[0]);
-  const header = keys.join(',');
+  const header = keys.map((k) => `"${String(k).replace(/"/g, '""')}"`).join(',');
   const lines = rows.map((row) =>
     keys
       .map((k) => {
@@ -37,7 +37,8 @@ function exportToCsv(filename, rows) {
       })
       .join(',')
   );
-  const csvContent = [header, ...lines].join('\n');
+  // Prepend UTF-8 BOM (\uFEFF) so Microsoft Excel opens currency symbols (₹) and text properly
+  const csvContent = '\uFEFF' + [header, ...lines].join('\r\n');
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -361,20 +362,26 @@ export default function ReportsPage() {
               ))}
             </div>
 
-            {/* CSV Export Button */}
+            {/* Export Buttons */}
             {salesSummary?.invoices && (
-              <button
-                onClick={() =>
-                  exportToCsv(
-                    `curated_art_sales_${period}_${new Date().toISOString().slice(0, 10)}.csv`,
-                    salesSummary.invoices
-                  )
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-semibold text-xs transition-colors self-start md:self-auto shadow-md"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export Sales CSV</span>
-              </button>
+              <div className="flex items-center gap-1.5 self-start md:self-auto">
+                <button
+                  onClick={() => exportSalesReport(salesSummary, period, 'xlsx')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+                  title="Download formatted Excel report (.xlsx)"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Excel</span>
+                </button>
+                <button
+                  onClick={() => exportSalesReport(salesSummary, period, 'csv')}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 font-semibold text-xs transition-colors shadow-md cursor-pointer"
+                  title="Download CSV (.csv)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-stone-400" />
+                  <span>CSV</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -576,18 +583,30 @@ export default function ReportsPage() {
               />
             </div>
 
-            <button
-              onClick={() =>
-                exportToCsv(
-                  `curated_art_product_profitability_${new Date().toISOString().slice(0, 10)}.csv`,
-                  productMargins
-                )
-              }
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-semibold text-xs transition-colors self-start md:self-auto shadow-md"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export Product Margins CSV</span>
-            </button>
+            <div className="flex items-center gap-1.5 self-start md:self-auto">
+              <button
+                onClick={() => {
+                  const list = filteredProducts.length > 0 ? filteredProducts : productMargins;
+                  exportProfitabilityReport(list, 'xlsx');
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+                title="Download formatted Excel report (.xlsx)"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Margins</span>
+              </button>
+              <button
+                onClick={() => {
+                  const list = filteredProducts.length > 0 ? filteredProducts : productMargins;
+                  exportProfitabilityReport(list, 'csv');
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 font-semibold text-xs transition-colors shadow-md cursor-pointer"
+                title="Download CSV (.csv)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-stone-400" />
+                <span>CSV</span>
+              </button>
+            </div>
           </div>
 
           <div className="bg-stone-900 border border-stone-800 rounded-2xl overflow-hidden shadow-xl">
@@ -707,18 +726,24 @@ export default function ReportsPage() {
               </p>
             </div>
 
-            <button
-              onClick={() =>
-                exportToCsv(
-                  `curated_art_category_performance_${new Date().toISOString().slice(0, 10)}.csv`,
-                  categorySales.categories
-                )
-              }
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-semibold text-xs transition-colors shadow-md"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export Categories CSV</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => exportCategoryReport(categorySales, 'xlsx')}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+                title="Download formatted Excel report (.xlsx)"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Categories</span>
+              </button>
+              <button
+                onClick={() => exportCategoryReport(categorySales, 'csv')}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 font-semibold text-xs transition-colors shadow-md cursor-pointer"
+                title="Download CSV (.csv)"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-stone-400" />
+                <span>CSV</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -803,18 +828,24 @@ export default function ReportsPage() {
               </div>
 
               {outstandings.customers.length > 0 && (
-                <button
-                  onClick={() =>
-                    exportToCsv(
-                      `curated_art_customer_receivables_${new Date().toISOString().slice(0, 10)}.csv`,
-                      outstandings.customers
-                    )
-                  }
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export Receivables CSV</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => exportCustomerReceivablesReport(outstandings.customers, 'xlsx')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+                    title="Download formatted Excel report (.xlsx)"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export Excel</span>
+                  </button>
+                  <button
+                    onClick={() => exportCustomerReceivablesReport(outstandings.customers, 'csv')}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 font-semibold text-xs transition-colors shadow-md cursor-pointer"
+                    title="Download CSV (.csv)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-stone-400" />
+                    <span>CSV</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -873,18 +904,24 @@ export default function ReportsPage() {
               </div>
 
               {outstandings.suppliers.length > 0 && (
-                <button
-                  onClick={() =>
-                    exportToCsv(
-                      `curated_art_supplier_payables_${new Date().toISOString().slice(0, 10)}.csv`,
-                      outstandings.suppliers
-                    )
-                  }
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export Payables CSV</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => exportSupplierPayablesReport(outstandings.suppliers, 'xlsx')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+                    title="Download formatted Excel report (.xlsx)"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export Excel</span>
+                  </button>
+                  <button
+                    onClick={() => exportSupplierPayablesReport(outstandings.suppliers, 'csv')}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 font-semibold text-xs transition-colors shadow-md cursor-pointer"
+                    title="Download CSV (.csv)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-stone-400" />
+                    <span>CSV</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -1063,18 +1100,24 @@ export default function ReportsPage() {
               </div>
 
               {gstData.gstr1.hsnSummary.length > 0 && (
-                <button
-                  onClick={() =>
-                    exportToCsv(
-                      `curated_art_gstr1_hsn_${new Date().toISOString().slice(0, 10)}.csv`,
-                      gstData.gstr1.hsnSummary
-                    )
-                  }
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-semibold text-xs transition-colors shadow-md"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export HSN CSV</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => exportGstr1HsnReport(gstData.gstr1.hsnSummary, 'xlsx')}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+                    title="Download formatted Excel report (.xlsx)"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Export HSN Excel</span>
+                  </button>
+                  <button
+                    onClick={() => exportGstr1HsnReport(gstData.gstr1.hsnSummary, 'csv')}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 font-semibold text-xs transition-colors shadow-md cursor-pointer"
+                    title="Download CSV (.csv)"
+                  >
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-stone-400" />
+                    <span>CSV</span>
+                  </button>
+                </div>
               )}
             </div>
 
@@ -1138,18 +1181,24 @@ export default function ReportsPage() {
             </div>
 
             {invoices.length > 0 && (
-              <button
-                onClick={() =>
-                  exportToCsv(
-                    `curated_art_all_invoices_${new Date().toISOString().slice(0, 10)}.csv`,
-                    invoices
-                  )
-                }
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-stone-950 font-semibold text-xs transition-colors shadow-md"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Export All Invoices CSV</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => exportInvoicesRegisterReport(invoices, 'xlsx')}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition-colors shadow-md cursor-pointer"
+                  title="Download formatted Excel report (.xlsx)"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export Invoices</span>
+                </button>
+                <button
+                  onClick={() => exportInvoicesRegisterReport(invoices, 'csv')}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-stone-900 border border-stone-800 hover:border-amber-500/50 text-stone-400 hover:text-stone-200 font-semibold text-xs transition-colors shadow-md cursor-pointer"
+                  title="Download CSV (.csv)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-stone-400" />
+                  <span>CSV</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -1237,7 +1286,7 @@ export default function ReportsPage() {
                 onClick={async () => {
                   await downloadExportFile(
                     '/api/export/customers?format=xlsx',
-                    'CURATED_ART-Account_List.xlsx',
+                    'Curated_Art_Master_Account_List.xlsx',
                     token
                   );
                 }}
@@ -1252,7 +1301,7 @@ export default function ReportsPage() {
                 onClick={async () => {
                   await downloadExportFile(
                     '/api/export/customers?format=csv',
-                    'CURATED_ART-Account_List.csv',
+                    'Curated_Art_Master_Account_List.csv',
                     token
                   );
                 }}

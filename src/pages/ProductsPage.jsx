@@ -327,7 +327,7 @@ export default function ProductsPage() {
           </button>
 
           <button
-            onClick={() => downloadExportFile('/api/export/products?format=xlsx', 'curated_art_products.xlsx', token)}
+            onClick={() => downloadExportFile('/api/export/products?format=xlsx', 'Curated_Art_Products_Catalog.xlsx', token)}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-stone-900 border border-stone-800 text-stone-300 hover:text-stone-100 hover:border-stone-700 text-xs font-semibold transition-colors cursor-pointer"
             title="Export Products Catalog (.xlsx)"
           >
