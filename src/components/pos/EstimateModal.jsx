@@ -505,7 +505,7 @@ export default function EstimateModal({
     setDownloadingExcel(true);
     try {
       const url = `/api/estimates/${currentEstimate.id}/export/excel`;
-      const fallbackFilename = `Estimate_${currentEstimate.estimateNumber || 'QUOTATION'}.xlsx`;
+      const fallbackFilename = `Curated_Art_Estimate_${currentEstimate.estimateNumber || 'QUOTATION'}.xlsx`;
       await downloadExportFile(url, fallbackFilename, token);
     } finally {
       setDownloadingExcel(false);

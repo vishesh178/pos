@@ -310,3 +310,4 @@ export function exportInvoicesRegisterReport(invoices = [], format = 'xlsx') {
     format,
   });
 }
+

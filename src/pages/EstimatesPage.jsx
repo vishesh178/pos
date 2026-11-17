@@ -127,7 +127,7 @@ export default function EstimatesPage() {
 
   const handleQuickExcel = async (est, e) => {
     e?.stopPropagation();
-    await downloadExportFile(`/api/estimates/${est.id}/export/excel`, `Estimate_${est.estimateNumber}.xlsx`, token);
+    await downloadExportFile(`/api/estimates/${est.id}/export/excel`, `Curated_Art_Estimate_${est.estimateNumber}.xlsx`, token);
   };
 
   // Quick WhatsApp share from table row

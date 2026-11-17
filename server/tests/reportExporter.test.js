@@ -105,3 +105,4 @@ test('Report Exporter - Generates clean workbook with auto column widths and no 
   assert.equal(json[0]['id'], undefined); // CUID must not exist!
   assert.equal(json[0]['cuid_test_12345'], undefined);
 });
+

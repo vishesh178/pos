@@ -1,5 +1,8 @@
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
+const ExcelJS = require('exceljs');
 const prisma = require('../prisma');
 const { authenticateToken, requireRole } = require('../middleware/auth');
 const { calculateInvoiceTotals } = require('../utils/gst');
@@ -474,167 +477,236 @@ router.get('/:id/export/excel', authenticateToken, async (req, res) => {
       address: 'Showroom #104, Design District, SG Highway, Ahmedabad, Gujarat - 380054',
     };
 
-    const XLSX = require('xlsx');
+    const wb = new ExcelJS.Workbook();
+    wb.creator = business.businessName;
+    wb.created = new Date();
+    const ws = wb.addWorksheet('Estimate', {
+      views: [{ showGridLines: true }],
+    });
 
-    const wsData = [];
-    const merges = [];
+    ws.columns = [
+      { width: 6 },   // Col 1: #
+      { width: 38 },  // Col 2: Item Description
+      { width: 20 },  // Col 3: Item Code / SKU
+      { width: 16 },  // Col 4: Product Photo
+      { width: 10 },  // Col 5: Qty
+      { width: 16 },  // Col 6: Rate (MRP) (₹)
+      { width: 14 },  // Col 7: Discount (₹)
+      { width: 18 },  // Col 8: Total (₹)
+    ];
 
-    // Row 0: Business Name
-    wsData.push([business.businessName.toUpperCase(), '', '', '', '', '', '', '']);
-    merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } });
+    // Row 1: Business Name
+    const r1 = ws.addRow([business.businessName.toUpperCase()]);
+    ws.mergeCells('A1:H1');
+    r1.getCell(1).font = { bold: true, size: 16, color: { argb: 'FFB45309' } };
+    r1.height = 24;
 
-    // Row 1: Tel & GSTIN
-    wsData.push([`Tel: ${business.phone || ''} | GSTIN: ${business.gstin || ''}`, '', '', '', '', '', '', '']);
-    merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: 7 } });
+    // Row 2: Tel & GSTIN
+    const r2 = ws.addRow([`Tel: ${business.phone || ''} | GSTIN: ${business.gstin || ''}`]);
+    ws.mergeCells('A2:H2');
+    r2.getCell(1).font = { size: 10, color: { argb: 'FF57534E' } };
 
-    // Row 2: Address
-    wsData.push([`Address: ${business.address || ''}`, '', '', '', '', '', '', '']);
-    merges.push({ s: { r: 2, c: 0 }, e: { r: 2, c: 7 } });
+    // Row 3: Address
+    const r3 = ws.addRow([`Address: ${business.address || ''}`]);
+    ws.mergeCells('A3:H3');
+    r3.getCell(1).font = { size: 9, color: { argb: 'FF78716C' } };
 
-    // Row 3: Blank
-    wsData.push([]);
+    // Row 4: Blank
+    ws.addRow([]);
 
-    // Row 4: Title & Doc Info
-    wsData.push(['ESTIMATE / QUOTATION', '', '', '', `Doc #: ${estimate.estimateNumber}`, '', `Date: ${new Date(estimate.createdAt).toLocaleDateString('en-IN')}`, '']);
-    merges.push({ s: { r: 4, c: 0 }, e: { r: 4, c: 3 } });
-    merges.push({ s: { r: 4, c: 4 }, e: { r: 4, c: 5 } });
-    merges.push({ s: { r: 4, c: 6 }, e: { r: 4, c: 7 } });
+    // Row 5: Title & Doc Info
+    const dateStr = new Date(estimate.createdAt).toLocaleDateString('en-IN');
+    const r5 = ws.addRow(['ESTIMATE / QUOTATION', '', '', '', `Doc #: ${estimate.estimateNumber}`, '', `Date: ${dateStr}`, '']);
+    ws.mergeCells('A5:D5');
+    ws.mergeCells('E5:F5');
+    ws.mergeCells('G5:H5');
+    r5.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF1C1917' } };
+    r5.getCell(5).font = { bold: true, size: 10, color: { argb: 'FF1C1917' } };
+    r5.getCell(7).font = { bold: true, size: 10, color: { argb: 'FF1C1917' } };
 
-    // Row 5: Customer & Validity
-    wsData.push([`Customer: ${estimate.customerName}`, '', '', '', `Valid For: ${estimate.validityDays || 15} Days`, '', `Status: ${estimate.status}`, '']);
-    merges.push({ s: { r: 5, c: 0 }, e: { r: 5, c: 3 } });
-    merges.push({ s: { r: 5, c: 4 }, e: { r: 5, c: 5 } });
-    merges.push({ s: { r: 5, c: 6 }, e: { r: 5, c: 7 } });
+    // Row 6: Customer & Validity
+    const r6 = ws.addRow([`Customer: ${estimate.customerName}`, '', '', '', `Valid For: ${estimate.validityDays || 15} Days`, '', `Status: ${estimate.status}`, '']);
+    ws.mergeCells('A6:D6');
+    ws.mergeCells('E6:F6');
+    ws.mergeCells('G6:H6');
+    r6.getCell(1).font = { size: 10, color: { argb: 'FF44403C' } };
+    r6.getCell(5).font = { size: 10, color: { argb: 'FF44403C' } };
+    r6.getCell(7).font = { bold: true, size: 10, color: { argb: 'FFB45309' } };
 
-    // Row 6: Phone & GSTIN & Place of Supply
-    wsData.push([`Phone: ${estimate.customerMobile || 'N/A'}`, '', `GSTIN: ${estimate.customerGstin || 'N/A'}`, '', `Place of Supply: ${estimate.placeOfSupply || '24-Gujarat'}`, '', '', '']);
-    merges.push({ s: { r: 6, c: 0 }, e: { r: 6, c: 1 } });
-    merges.push({ s: { r: 6, c: 2 }, e: { r: 6, c: 3 } });
-    merges.push({ s: { r: 6, c: 4 }, e: { r: 6, c: 7 } });
+    // Row 7: Phone & GSTIN & Place of Supply
+    const r7 = ws.addRow([`Phone: ${estimate.customerMobile || 'N/A'}`, '', `GSTIN: ${estimate.customerGstin || 'N/A'}`, '', `Place of Supply: ${estimate.placeOfSupply || '24-Gujarat'}`, '', '', '']);
+    ws.mergeCells('A7:B7');
+    ws.mergeCells('C7:D7');
+    ws.mergeCells('E7:H7');
+    r7.getCell(1).font = { size: 9, color: { argb: 'FF78716C' } };
+    r7.getCell(3).font = { size: 9, color: { argb: 'FF78716C' } };
+    r7.getCell(5).font = { size: 9, color: { argb: 'FF78716C' } };
 
-    // Row 7: Blank
-    wsData.push([]);
+    // Row 8: Blank
+    ws.addRow([]);
 
-    // Row 8: Table Header
-    wsData.push(['#', 'Item Description', 'Item Code / SKU', 'Product Photo', 'Qty', 'Rate (MRP) (₹)', 'Discount (₹)', 'Total (₹)']);
+    // Row 9: Table Header
+    const th = ws.addRow(['#', 'Item Description', 'Item Code / SKU', 'Product Photo', 'Qty', 'Rate (MRP) (₹)', 'Discount (₹)', 'Total (₹)']);
+    th.height = 24;
+    th.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9.5 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF292524' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
 
-    const host = req.get('host') || 'localhost:5001';
-    const protocol = req.protocol || 'http';
-    const baseUrl = `${protocol}://${host}`;
-
-    (estimate.items || []).forEach((it, idx) => {
-      let photoUrl = it.product?.imageUrl || it.imageUrl || '';
-      if (photoUrl && photoUrl.startsWith('/')) {
-        photoUrl = `${baseUrl}${photoUrl}`;
-      } else if (!photoUrl) {
-        photoUrl = '-';
-      }
-
-      wsData.push([
+    // Items Rows
+    for (let idx = 0; idx < (estimate.items || []).length; idx++) {
+      const it = estimate.items[idx];
+      const row = ws.addRow([
         idx + 1,
         it.productName,
         it.sku || it.product?.sku || 'CUSTOM',
-        photoUrl,
+        '', // Image or 'No Photo'
         Number(it.quantity),
         Number(it.mrp || it.unitPrice),
         Number(it.discountAmount || 0),
         Number(it.totalAmount),
       ]);
-    });
+      row.height = 55;
 
-    // Blank row before totals
-    wsData.push([]);
+      row.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+      row.getCell(2).font = { bold: true, size: 10 };
+      row.getCell(3).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(3).font = { size: 9, color: { argb: 'FF57534E' } };
+      row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+      row.getCell(5).font = { bold: true };
+      row.getCell(6).numFmt = '#,##0.00';
+      row.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(7).numFmt = '#,##0.00';
+      row.getCell(7).alignment = { horizontal: 'right', vertical: 'middle' };
+      row.getCell(8).numFmt = '#,##0.00';
+      row.getCell(8).font = { bold: true, size: 10 };
+      row.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
+
+      // Row borders
+      row.eachCell((cell) => {
+        cell.border = {
+          bottom: { style: 'thin', color: { argb: 'FFE7E5E4' } },
+        };
+      });
+
+      // Embed Real Photo
+      const photoRel = it.product?.imageUrl || it.imageUrl;
+      let photoAdded = false;
+      if (photoRel) {
+        const fullImgPath = path.resolve(__dirname, '../../uploads', photoRel.replace(/^\/uploads\/?/, ''));
+        if (fs.existsSync(fullImgPath)) {
+          const rawExt = path.extname(fullImgPath).toLowerCase().replace('.', '');
+          const imgExt = rawExt === 'jpg' ? 'jpeg' : rawExt;
+          if (['jpeg', 'png', 'gif'].includes(imgExt)) {
+            try {
+              const imgId = wb.addImage({
+                filename: fullImgPath,
+                extension: imgExt,
+              });
+              ws.addImage(imgId, {
+                tl: { col: 3.12, row: row.number - 1 + 0.05 },
+                ext: { width: 48, height: 48 },
+                editAs: 'oneCell',
+              });
+              photoAdded = true;
+            } catch (imgErr) {
+              console.warn('Could not embed image in Excel:', imgErr);
+            }
+          }
+        }
+      }
+
+      if (!photoAdded) {
+        row.getCell(4).value = 'No Photo';
+        row.getCell(4).font = { italic: true, size: 8.5, color: { argb: 'FF9CA3AF' } };
+        row.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+      }
+    }
+
+    // Blank row
+    ws.addRow([]);
 
     // Subtotal Row
-    const subtotalIdx = wsData.length;
-    wsData.push(['BILLING AMOUNT (SUBTOTAL):', '', '', '', '', '', '', Number(estimate.subtotal)]);
-    merges.push({ s: { r: subtotalIdx, c: 0 }, e: { r: subtotalIdx, c: 6 } });
+    const subtotalRow = ws.addRow(['BILLING AMOUNT (SUBTOTAL):', '', '', '', '', '', '', Number(estimate.subtotal)]);
+    ws.mergeCells(`A${subtotalRow.number}:G${subtotalRow.number}`);
+    subtotalRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+    subtotalRow.getCell(1).font = { bold: true, size: 9.5 };
+    subtotalRow.getCell(8).numFmt = '#,##0.00';
+    subtotalRow.getCell(8).font = { bold: true };
 
     if (estimate.discountTotal > 0) {
-      const discIdx = wsData.length;
-      wsData.push(['TOTAL DISCOUNT APPLIED:', '', '', '', '', '', '', -Number(estimate.discountTotal)]);
-      merges.push({ s: { r: discIdx, c: 0 }, e: { r: discIdx, c: 6 } });
+      const discRow = ws.addRow(['TOTAL DISCOUNT APPLIED:', '', '', '', '', '', '', -Number(estimate.discountTotal)]);
+      ws.mergeCells(`A${discRow.number}:G${discRow.number}`);
+      discRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+      discRow.getCell(1).font = { bold: true, size: 9.5, color: { argb: 'FFB45309' } };
+      discRow.getCell(8).numFmt = '-#,##0.00';
+      discRow.getCell(8).font = { bold: true, color: { argb: 'FFB45309' } };
     }
 
     if (estimate.cgstTotal > 0) {
-      const cgstIdx = wsData.length;
-      wsData.push(['CGST:', '', '', '', '', '', '', Number(estimate.cgstTotal)]);
-      merges.push({ s: { r: cgstIdx, c: 0 }, e: { r: cgstIdx, c: 6 } });
+      const cgstRow = ws.addRow(['CGST (Intra-State):', '', '', '', '', '', '', Number(estimate.cgstTotal)]);
+      ws.mergeCells(`A${cgstRow.number}:G${cgstRow.number}`);
+      cgstRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+      cgstRow.getCell(8).numFmt = '#,##0.00';
 
-      const sgstIdx = wsData.length;
-      wsData.push(['SGST:', '', '', '', '', '', '', Number(estimate.sgstTotal)]);
-      merges.push({ s: { r: sgstIdx, c: 0 }, e: { r: sgstIdx, c: 6 } });
+      const sgstRow = ws.addRow(['SGST (Intra-State):', '', '', '', '', '', '', Number(estimate.sgstTotal)]);
+      ws.mergeCells(`A${sgstRow.number}:G${sgstRow.number}`);
+      sgstRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+      sgstRow.getCell(8).numFmt = '#,##0.00';
     }
 
     if (estimate.igstTotal > 0) {
-      const igstIdx = wsData.length;
-      wsData.push(['IGST (Inter-State):', '', '', '', '', '', '', Number(estimate.igstTotal)]);
-      merges.push({ s: { r: igstIdx, c: 0 }, e: { r: igstIdx, c: 6 } });
+      const igstRow = ws.addRow(['IGST (Inter-State):', '', '', '', '', '', '', Number(estimate.igstTotal)]);
+      ws.mergeCells(`A${igstRow.number}:G${igstRow.number}`);
+      igstRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+      igstRow.getCell(8).numFmt = '#,##0.00';
     }
 
     if (estimate.roundOff !== 0) {
-      const roIdx = wsData.length;
-      wsData.push(['Round Off:', '', '', '', '', '', '', Number(estimate.roundOff)]);
-      merges.push({ s: { r: roIdx, c: 0 }, e: { r: roIdx, c: 6 } });
+      const roRow = ws.addRow(['Round Off:', '', '', '', '', '', '', Number(estimate.roundOff)]);
+      ws.mergeCells(`A${roRow.number}:G${roRow.number}`);
+      roRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+      roRow.getCell(8).numFmt = '#,##0.00';
     }
 
     // Final Grand Total Row
-    const grandIdx = wsData.length;
-    wsData.push(['FINAL PAYABLE AMOUNT (GRAND TOTAL):', '', '', '', '', '', '', Number(estimate.grandTotal)]);
-    merges.push({ s: { r: grandIdx, c: 0 }, e: { r: grandIdx, c: 6 } });
+    const grandRow = ws.addRow(['FINAL PAYABLE AMOUNT (GRAND TOTAL):', '', '', '', '', '', '', Number(estimate.grandTotal)]);
+    ws.mergeCells(`A${grandRow.number}:G${grandRow.number}`);
+    grandRow.height = 26;
+    grandRow.getCell(1).alignment = { horizontal: 'right', vertical: 'middle' };
+    grandRow.getCell(1).font = { bold: true, size: 11, color: { argb: 'FF000000' } };
+    grandRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } };
+    grandRow.getCell(8).numFmt = '#,##0.00';
+    grandRow.getCell(8).font = { bold: true, size: 12, color: { argb: 'FF000000' } };
+    grandRow.getCell(8).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF59E0B' } };
+    grandRow.getCell(8).alignment = { horizontal: 'right', vertical: 'middle' };
 
     // Blank row
-    wsData.push([]);
+    ws.addRow([]);
 
     // Terms & Notes
-    const notesIdx = wsData.length;
-    wsData.push(['Notes & Terms:']);
-    merges.push({ s: { r: notesIdx, c: 0 }, e: { r: notesIdx, c: 7 } });
+    const nTitle = ws.addRow(['Notes & Terms:']);
+    ws.mergeCells(`A${nTitle.number}:H${nTitle.number}`);
+    nTitle.getCell(1).font = { bold: true, size: 9.5 };
 
-    const note1Idx = wsData.length;
-    wsData.push([`1. This estimate is valid for ${estimate.validityDays || 15} days from the date of issue.`]);
-    merges.push({ s: { r: note1Idx, c: 0 }, e: { r: note1Idx, c: 7 } });
+    const n1 = ws.addRow([`1. This estimate is valid for ${estimate.validityDays || 15} days from the date of issue.`]);
+    ws.mergeCells(`A${n1.number}:H${n1.number}`);
+    n1.getCell(1).font = { size: 8.5, color: { argb: 'FF78716C' } };
 
-    const note2Idx = wsData.length;
-    wsData.push(['2. Subject to product availability at the time of final confirmation.']);
-    merges.push({ s: { r: note2Idx, c: 0 }, e: { r: note2Idx, c: 7 } });
+    const n2 = ws.addRow(['2. Subject to product availability at the time of final confirmation.']);
+    ws.mergeCells(`A${n2.number}:H${n2.number}`);
+    n2.getCell(1).font = { size: 8.5, color: { argb: 'FF78716C' } };
 
-    const note3Idx = wsData.length;
-    wsData.push(['3. Fragile luxury décor is quality-checked prior to dispatch.']);
-    merges.push({ s: { r: note3Idx, c: 0 }, e: { r: note3Idx, c: 7 } });
+    const n3 = ws.addRow(['3. Fragile luxury décor is quality-checked prior to dispatch.']);
+    ws.mergeCells(`A${n3.number}:H${n3.number}`);
+    n3.getCell(1).font = { size: 8.5, color: { argb: 'FF78716C' } };
 
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-    ws['!merges'] = merges;
-    ws['!cols'] = [
-      { wch: 6 },   // #
-      { wch: 38 },  // Item Description
-      { wch: 20 },  // Item Code / SKU
-      { wch: 32 },  // Product Photo Link
-      { wch: 8 },   // Qty
-      { wch: 16 },  // Rate (MRP) (₹)
-      { wch: 16 },  // Discount (₹)
-      { wch: 18 },  // Total (₹)
-    ];
-
-    // Format currency and numeric cells
-    for (let r = 8; r < wsData.length; r++) {
-      ['E', 'F', 'G', 'H'].forEach((col) => {
-        const cellRef = `${col}${r + 1}`;
-        if (ws[cellRef] && typeof ws[cellRef].v === 'number') {
-          ws[cellRef].t = 'n';
-          ws[cellRef].z = col === 'E' ? '#,##0' : '#,##0.00';
-        }
-      });
-    }
-
-    XLSX.utils.book_append_sheet(wb, ws, 'Estimate');
-
-    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const buffer = await wb.xlsx.writeBuffer();
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="Estimate_${estimate.estimateNumber}.xlsx"`);
-    res.send(buffer);
+    res.setHeader('Content-Disposition', `attachment; filename="Curated_Art_Estimate_${estimate.estimateNumber}.xlsx"`);
+    res.send(Buffer.from(buffer));
   } catch (err) {
     console.error('Estimate Excel export error:', err);
     res.status(500).json({ error: 'Failed to export estimate to Excel: ' + err.message });
