@@ -34,6 +34,7 @@ async function generateEstimatePdf(estimate, business = {}) {
       const doc = new PDFDocument({
         size: 'A4',
         margin: 36,
+        bufferPages: true,
         info: {
           Title: `Estimate ${estimate.estimateNumber || ''}`,
           Author: bizName,
@@ -47,7 +48,9 @@ async function generateEstimatePdf(estimate, business = {}) {
       doc.on('error', reject);
 
       const margin = 36;
+      const pageHeight = 841.89; // A4 height in pt
       const contentWidth = 595.28 - margin * 2; // 523.28 pt
+      const bottomLimit = pageHeight - margin - 24;
       let cursorY = margin;
 
       // 1. Header
@@ -115,35 +118,44 @@ async function generateEstimatePdf(estimate, business = {}) {
         total: 79.28,
       };
 
-      doc.rect(margin, cursorY, contentWidth, 20).fill('#292524');
-      doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
+      const renderTableHeader = (y) => {
+        doc.rect(margin, y, contentWidth, 20).fill('#292524');
+        doc.font('Helvetica-Bold').fontSize(8).fillColor('#ffffff');
 
-      let colX = margin + 6;
-      doc.text('#', colX, cursorY + 6, { width: colWidths.idx });
-      colX += colWidths.idx;
-      doc.text('ITEM & DESCRIPTION', colX, cursorY + 6, { width: colWidths.desc });
-      colX += colWidths.desc;
-      doc.text('HSN', colX, cursorY + 6, { width: colWidths.hsn });
-      colX += colWidths.hsn;
-      doc.text('QTY', colX, cursorY + 6, { width: colWidths.qty, align: 'center' });
-      colX += colWidths.qty;
-      doc.text('RATE (₹)', colX, cursorY + 6, { width: colWidths.rate, align: 'right' });
-      colX += colWidths.rate;
-      doc.text('DISC (₹)', colX, cursorY + 6, { width: colWidths.disc, align: 'right' });
-      colX += colWidths.disc;
-      doc.text('TOTAL (₹)', colX, cursorY + 6, { width: colWidths.total, align: 'right' });
+        let colX = margin + 6;
+        doc.text('#', colX, y + 6, { width: colWidths.idx });
+        colX += colWidths.idx;
+        doc.text('ITEM & DESCRIPTION', colX, y + 6, { width: colWidths.desc });
+        colX += colWidths.desc;
+        doc.text('HSN', colX, y + 6, { width: colWidths.hsn });
+        colX += colWidths.hsn;
+        doc.text('QTY', colX, y + 6, { width: colWidths.qty, align: 'center' });
+        colX += colWidths.qty;
+        doc.text('RATE (₹)', colX, y + 6, { width: colWidths.rate, align: 'right' });
+        colX += colWidths.rate;
+        doc.text('DISC (₹)', colX, y + 6, { width: colWidths.disc, align: 'right' });
+        colX += colWidths.disc;
+        doc.text('TOTAL (₹)', colX, y + 6, { width: colWidths.total, align: 'right' });
+        return y + 20;
+      };
 
-      cursorY += 20;
+      cursorY = renderTableHeader(cursorY);
 
       // 4. Line Items Rows
       const items = estimate.items || [];
       items.forEach((it, idx) => {
         const rowHeight = 24;
+        if (cursorY + rowHeight > bottomLimit) {
+          doc.addPage();
+          cursorY = margin;
+          cursorY = renderTableHeader(cursorY);
+        }
+
         const bg = idx % 2 === 0 ? '#ffffff' : '#f5f5f4';
         doc.rect(margin, cursorY, contentWidth, rowHeight).fill(bg);
 
         doc.font('Helvetica').fontSize(8).fillColor('#1c1917');
-        colX = margin + 6;
+        let colX = margin + 6;
         doc.text(String(idx + 1), colX, cursorY + 7, { width: colWidths.idx });
         colX += colWidths.idx;
 
@@ -180,6 +192,12 @@ async function generateEstimatePdf(estimate, business = {}) {
       cursorY += 12;
 
       // 5. Totals & Notes Section
+      const totalsNeededHeight = 160;
+      if (cursorY + totalsNeededHeight > bottomLimit) {
+        doc.addPage();
+        cursorY = margin;
+      }
+
       const summaryWidth = 200;
       const summaryX = margin + contentWidth - summaryWidth;
 
@@ -229,6 +247,22 @@ async function generateEstimatePdf(estimate, business = {}) {
       doc.text(`For ${bizName.toUpperCase()}`, margin + contentWidth - 160, cursorY + 20, { align: 'right', width: 160 });
       doc.font('Helvetica').fontSize(7.5).fillColor('#78716c');
       doc.text('Authorized Signatory', margin + contentWidth - 160, cursorY + 45, { align: 'right', width: 160 });
+
+      // Page numbering footer on all pages
+      const range = doc.bufferedPageRange();
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i);
+        const oldBottom = doc.page.margins.bottom;
+        doc.page.margins.bottom = 0;
+        doc.font('Helvetica').fontSize(7.5).fillColor('#a8a29e');
+        doc.text(
+          `Page ${i + 1} of ${range.count}`,
+          margin,
+          pageHeight - margin + 8,
+          { align: 'center', width: contentWidth }
+        );
+        doc.page.margins.bottom = oldBottom;
+      }
 
       doc.end();
     } catch (err) {
