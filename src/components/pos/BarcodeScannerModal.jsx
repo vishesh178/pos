@@ -58,6 +58,8 @@ export default function BarcodeScannerModal({
   const [scanningPhoto, setScanningPhoto] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
+  const [hasZoom, setHasZoom] = useState(false);
+  const [currentZoom, setCurrentZoom] = useState(1);
   const [cameras, setCameras] = useState([]);
   const [activeCameraIdx, setActiveCameraIdx] = useState(0);
 
@@ -65,6 +67,12 @@ export default function BarcodeScannerModal({
   const fileInputRef = useRef(null);
   const lastScannedTimeRef = useRef({});
   const isProcessingRef = useRef(false);
+
+  // Keep a stable ref to onProductScanned so cart updates in parent never recreate callbacks
+  const onProductScannedRef = useRef(onProductScanned);
+  useEffect(() => {
+    onProductScannedRef.current = onProductScanned;
+  }, [onProductScanned]);
 
   // Look up scanned code in backend POS catalog and add to estimate/cart
   const handleLookupAndAdd = useCallback(
@@ -90,7 +98,8 @@ export default function BarcodeScannerModal({
 
         if (Array.isArray(items) && items.length > 0) {
           const matched = items[0];
-          onProductScanned?.(matched);
+          // Invoke through stable ref: guarantees parent cart update never causes camera restart/blink
+          onProductScannedRef.current?.(matched);
           setLastScanned({
             code,
             product: matched,
@@ -120,8 +129,13 @@ export default function BarcodeScannerModal({
         }, 600);
       }
     },
-    [onProductScanned]
+    []
   );
+
+  const handleLookupAndAddRef = useRef(handleLookupAndAdd);
+  useEffect(() => {
+    handleLookupAndAddRef.current = handleLookupAndAdd;
+  }, [handleLookupAndAdd]);
 
   // Snap photo file fallback (works 100% on HTTP and all mobile browsers)
   const handlePhotoCapture = async (e) => {
@@ -201,17 +215,46 @@ export default function BarcodeScannerModal({
 
         if (isMounted) setCameras(devices);
 
-        let selectedCam = devices[0].id;
-        const rearCamIdx = devices.findIndex(
-          (d) =>
-            d.label?.toLowerCase().includes('back') ||
-            d.label?.toLowerCase().includes('rear') ||
-            d.label?.toLowerCase().includes('environment')
-        );
-        if (rearCamIdx > -1) {
-          selectedCam = devices[rearCamIdx].id;
-          if (isMounted) setActiveCameraIdx(rearCamIdx);
+        // Smart camera selection:
+        // On modern phones (especially iPhones), devices[0] is often the Ultra-Wide 0.5x camera,
+        // which has a fixed/long focal distance and cannot focus on barcodes held close up.
+        // We filter out front cameras and ultra-wide/telephoto lenses, prioritizing the primary 1x Wide autofocus camera.
+        const rearCams = devices.filter((d) => {
+          const lbl = (d.label || '').toLowerCase();
+          return !lbl.includes('front') && !lbl.includes('user') && !lbl.includes('face') && !lbl.includes('selfie');
+        });
+
+        let selectedCam = null;
+        let selectedIdx = 0;
+
+        const mainRearIdx = devices.findIndex((d) => {
+          const lbl = (d.label || '').toLowerCase();
+          const isRear = lbl.includes('back') || lbl.includes('rear') || lbl.includes('environment');
+          const isUltra = lbl.includes('ultra') || lbl.includes('0.5') || lbl.includes('wide-angle');
+          const isTele = lbl.includes('telephoto') || lbl.includes('zoom');
+          return isRear && !isUltra && !isTele;
+        });
+
+        if (mainRearIdx > -1) {
+          selectedCam = devices[mainRearIdx].id;
+          selectedIdx = mainRearIdx;
+        } else if (rearCams.length > 0) {
+          const rearIdx = devices.findIndex((d) => d.id === rearCams[0].id);
+          selectedCam = rearCams[0].id;
+          selectedIdx = rearIdx > -1 ? rearIdx : 0;
+        } else {
+          selectedCam = devices[0].id;
+          selectedIdx = 0;
         }
+
+        if (isMounted) setActiveCameraIdx(selectedIdx);
+
+        // If on mobile (iOS/Android) where browser hides labels before stream permission,
+        // { facingMode: "environment" } is best because OS automatically selects the primary 1x autofocus camera.
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const cameraConfig = (isMobile && !devices.some((d) => d.label && d.label.length > 0))
+          ? { facingMode: 'environment' }
+          : selectedCam;
 
         const scannerId = 'curated-art-barcode-reader';
         const html5QrCode = new Html5Qrcode(scannerId, {
@@ -229,31 +272,53 @@ export default function BarcodeScannerModal({
 
         html5QrCodeRef.current = html5QrCode;
 
+        // Omit aspectRatio: 1.0 to preserve native sensor aspect ratio and autofocus fidelity
         const config = {
-          fps: 15,
+          fps: 20,
           qrbox: (viewfinderWidth, viewfinderHeight) => {
-            const width = Math.min(viewfinderWidth * 0.85, 320);
-            const height = Math.min(viewfinderHeight * 0.45, 180);
+            const width = Math.min(viewfinderWidth * 0.88, 340);
+            const height = Math.min(viewfinderHeight * 0.48, 180);
             return { width: Math.round(width), height: Math.round(height) };
           },
-          aspectRatio: 1.0,
+          videoConstraints: {
+            facingMode: { ideal: 'environment' },
+            focusMode: { ideal: 'continuous' },
+            advanced: [{ focusMode: 'continuous' }],
+          },
         };
 
         await html5QrCode.start(
-          selectedCam,
+          cameraConfig,
           config,
           (decodedText) => {
-            handleLookupAndAdd(decodedText);
+            // Stable ref invocation guarantees zero camera restarts on cart change
+            handleLookupAndAddRef.current?.(decodedText);
           },
           () => {}
         );
 
         if (isMounted) {
           setScannerReady(true);
+          // Apply hardware continuous autofocus and probe zoom/torch capabilities
           try {
-            const track = html5QrCode.getRunningTrackCameraCapabilities?.();
-            if (track && track.torchFeature?.().isSupported?.()) {
-              setHasTorch(true);
+            const videoEl = document.querySelector('#curated-art-barcode-reader video');
+            const track = videoEl?.srcObject?.getVideoTracks()?.[0];
+            if (track) {
+              const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+              if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
+              }
+              if (capabilities.zoom) {
+                setHasZoom(true);
+              }
+              if (capabilities.torch) {
+                setHasTorch(true);
+              }
+            } else {
+              const trackCap = html5QrCode.getRunningTrackCameraCapabilities?.();
+              if (trackCap && trackCap.torchFeature?.().isSupported?.()) {
+                setHasTorch(true);
+              }
             }
           } catch (e) {}
         }
@@ -284,20 +349,57 @@ export default function BarcodeScannerModal({
         }
       }
     };
-  }, [isOpen, handleLookupAndAdd]);
+  }, [isOpen]);
 
   // Toggle Torch / Flashlight
   const handleToggleTorch = async () => {
-    if (!html5QrCodeRef.current || !hasTorch) return;
     try {
+      const videoEl = document.querySelector('#curated-art-barcode-reader video');
+      const track = videoEl?.srcObject?.getVideoTracks()?.[0];
       const nextTorch = !torchOn;
-      await html5QrCodeRef.current.applyVideoConstraints({
-        advanced: [{ torch: nextTorch }],
-      });
-      setTorchOn(nextTorch);
+      if (track) {
+        await track.applyConstraints({ advanced: [{ torch: nextTorch }] });
+        setTorchOn(nextTorch);
+      } else if (html5QrCodeRef.current) {
+        await html5QrCodeRef.current.applyVideoConstraints({
+          advanced: [{ torch: nextTorch }],
+        });
+        setTorchOn(nextTorch);
+      }
     } catch (e) {
       console.warn('Torch toggle failed:', e);
     }
+  };
+
+  // Toggle 1x / 2x Zoom (Makes small tag barcodes razor-sharp without having to get too close)
+  const handleToggleZoom = async () => {
+    try {
+      const videoEl = document.querySelector('#curated-art-barcode-reader video');
+      const track = videoEl?.srcObject?.getVideoTracks()?.[0];
+      if (!track) return;
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (!capabilities.zoom) return;
+
+      const maxZoom = Math.min(capabilities.zoom.max || 3, 2.5);
+      const nextZoom = currentZoom === 1 ? maxZoom : 1;
+      await track.applyConstraints({ advanced: [{ zoom: nextZoom }] });
+      setCurrentZoom(nextZoom);
+    } catch (e) {
+      console.warn('Zoom toggle failed:', e);
+    }
+  };
+
+  // Tap-to-Refocus on Viewfinder
+  const handleTapToFocus = async () => {
+    try {
+      const videoEl = document.querySelector('#curated-art-barcode-reader video');
+      const track = videoEl?.srcObject?.getVideoTracks()?.[0];
+      if (!track) return;
+      const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+      if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+      }
+    } catch (_) {}
   };
 
   // Flip Camera (Front / Back)
@@ -315,10 +417,14 @@ export default function BarcodeScannerModal({
       await scanner.start(
         cameras[nextIdx].id,
         {
-          fps: 15,
-          qrbox: { width: 280, height: 160 },
+          fps: 20,
+          qrbox: { width: 300, height: 160 },
+          videoConstraints: {
+            focusMode: { ideal: 'continuous' },
+            advanced: [{ focusMode: 'continuous' }],
+          },
         },
-        (decodedText) => handleLookupAndAdd(decodedText),
+        (decodedText) => handleLookupAndAddRef.current?.(decodedText),
         () => {}
       );
     } catch (e) {
@@ -366,6 +472,21 @@ export default function BarcodeScannerModal({
         </div>
 
         <div className="flex items-center gap-2">
+          {hasZoom && (
+            <button
+              type="button"
+              onClick={handleToggleZoom}
+              className={`px-2.5 py-1.5 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
+                currentZoom > 1
+                  ? 'bg-amber-500 text-stone-950 font-black shadow-md shadow-amber-950/40'
+                  : 'bg-stone-800 text-stone-300 hover:text-stone-100'
+              }`}
+              title="Toggle 2x Zoom for Small Barcodes"
+            >
+              {currentZoom > 1 ? '2×' : '1×'}
+            </button>
+          )}
+
           {hasTorch && (
             <button
               type="button"
@@ -401,8 +522,11 @@ export default function BarcodeScannerModal({
         </div>
       </div>
 
-      {/* Main Viewfinder Section */}
-      <div className="flex-1 relative flex items-center justify-center overflow-hidden bg-black p-4">
+      {/* Main Viewfinder Section (Tap anywhere on screen to refocus) */}
+      <div
+        onClick={handleTapToFocus}
+        className="flex-1 relative flex items-center justify-center overflow-hidden bg-black p-4 cursor-crosshair"
+      >
         {/* html5-qrcode video viewport container */}
         <div
           id="curated-art-barcode-reader"
@@ -411,7 +535,7 @@ export default function BarcodeScannerModal({
 
         {/* Laser HUD Frame Overlay (When Live Video is Running) */}
         {scannerReady && !errorMessage && !isHttpOrigin && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+          <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
             <div className="relative w-72 h-44 border-2 border-amber-500/80 rounded-2xl shadow-[0_0_25px_rgba(245,158,11,0.35)] flex items-center justify-center overflow-hidden">
               <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-amber-400 rounded-tl-xl" />
               <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-amber-400 rounded-tr-xl" />
@@ -424,6 +548,10 @@ export default function BarcodeScannerModal({
                 Align Barcode Here
               </span>
             </div>
+
+            <p className="mt-3 text-[11px] text-stone-300 bg-stone-900/90 border border-stone-700/60 px-3 py-1 rounded-full shadow-lg backdrop-blur-sm pointer-events-none">
+              Hold tag 15–20 cm away • Tap screen to refocus
+            </p>
           </div>
         )}
 

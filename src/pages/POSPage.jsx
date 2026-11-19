@@ -93,6 +93,13 @@ export default function POSPage() {
   const [mobileTab, setMobileTab] = useState('catalog'); // 'catalog' | 'cart'
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
+  const handleBarcodeProductScanned = useCallback(
+    (product) => {
+      addToCart(product, 1);
+    },
+    [addToCart]
+  );
+
   // Auto-open camera scanner if ?scan=1 is in URL
   useEffect(() => {
     if (searchParams.get('scan') === '1' || searchParams.get('scan') === 'true') {
@@ -1965,9 +1972,7 @@ export default function POSPage() {
       <BarcodeScannerModal
         isOpen={isScannerOpen}
         onClose={() => setIsScannerOpen(false)}
-        onProductScanned={(product) => {
-          addToCart(product, 1);
-        }}
+        onProductScanned={handleBarcodeProductScanned}
         cartCount={cart.reduce((s, it) => s + it.quantity, 0)}
         cartTotal={totals.grandTotal}
         onReviewCart={() => {
